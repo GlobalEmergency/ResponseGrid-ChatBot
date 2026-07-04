@@ -5,7 +5,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { RunContext } from "@openai/agents";
 import type { AgentContext } from "../../agent/context.js";
-import type { ApiClient } from "../../api/api-client.js";
+import type { ApiClient } from "../responsegrid/api-client.js";
+import type { Account } from "../../domain/account.js";
 
 /**
  * Interface that abstracts the shape of core chatbot tools.
@@ -23,7 +24,10 @@ export interface CoreTool {
  * Following the Single Responsibility Principle, its sole job is translating schemas and context.
  */
 export class McpToolMapper {
-  constructor(private readonly apiClient: ApiClient) {}
+  constructor(
+    private readonly apiClient: ApiClient,
+    private readonly account: Account,
+  ) {}
 
   /**
    * Registers a list of CoreTools to a low-level MCP Server instance.
@@ -58,6 +62,7 @@ export class McpToolMapper {
         context: {
           channel: "mcp",
           chatId: "mcp-session",
+          account: this.account,
           user: {
             username: "mcp-user",
           },

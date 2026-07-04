@@ -2,8 +2,17 @@ import test from "node:test";
 import assert from "node:assert";
 import { z } from "zod";
 import { McpToolMapper, CoreTool } from "./mcp-tool-mapper.js";
-import { ApiClient } from "../../api/api-client.js";
+import { ApiClient } from "../responsegrid/api-client.js";
+import type { Account } from "../../domain/account.js";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
+
+const dummyAccount: Account = {
+  id: "acc-mcp-test",
+  channel: "telegram",
+  emergencySlug: "sismo-2026",
+  apiToken: "rg_live_test",
+  telegramBotToken: "bot-test",
+};
 
 function makeMockServer() {
   const handlers = new Map<any, Function>();
@@ -19,7 +28,7 @@ test("McpToolMapper - Unit Tests", async (t) => {
   const mockApiClient = {} as ApiClient;
 
   await t.test("should list only non-skipped tools", async () => {
-    const mapper = new McpToolMapper(mockApiClient);
+    const mapper = new McpToolMapper(mockApiClient, dummyAccount);
     const { server, handlers } = makeMockServer();
 
     const dummyTool: CoreTool = {
@@ -47,7 +56,7 @@ test("McpToolMapper - Unit Tests", async (t) => {
   });
 
   await t.test("should execute tool handler and return correct content structure", async () => {
-    const mapper = new McpToolMapper(mockApiClient);
+    const mapper = new McpToolMapper(mockApiClient, dummyAccount);
     const { server, handlers } = makeMockServer();
 
     const dummyTool: CoreTool = {
@@ -78,7 +87,7 @@ test("McpToolMapper - Unit Tests", async (t) => {
   });
 
   await t.test("should catch execution errors and return them as MCP error content", async () => {
-    const mapper = new McpToolMapper(mockApiClient);
+    const mapper = new McpToolMapper(mockApiClient, dummyAccount);
     const { server, handlers } = makeMockServer();
 
     const errorTool: CoreTool = {

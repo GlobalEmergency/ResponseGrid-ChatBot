@@ -15,27 +15,20 @@ function optional(name: string): string | undefined {
   return value && value.trim() !== "" ? value : undefined;
 }
 
-const apiAuthMode = optional("API_AUTH_MODE") ?? "bearer";
-
-if (!["bearer", "api-key"].includes(apiAuthMode)) {
-  throw new Error("API_AUTH_MODE debe ser bearer o api-key");
+function optionalInt(name: string): number | undefined {
+  const value = optional(name);
+  return value ? Number.parseInt(value, 10) : undefined;
 }
 
 export const env = {
   openaiApiKey: required("OPENAI_API_KEY"),
   openaiModel: optional("OPENAI_MODEL"),
-  telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
 
-  // ResponseGrid / API externa
+  // ResponseGrid / API externa — una sola instancia compartida por todas las cuentas.
   apiBaseUrl: optional("API_BASE_URL"),
-  apiToken: optional("API_TOKEN"),
-  apiAuthMode: apiAuthMode as "bearer" | "api-key",
 
-  // Puedes fijar una emergencia por defecto para no tener que repetirla por Telegram.
-  responsegridDefaultEmergencyId: optional("RESPONSEGRID_DEFAULT_EMERGENCY_ID"),
-  responsegridDefaultEmergencySlug: optional("RESPONSEGRID_DEFAULT_EMERGENCY_SLUG"),
-
-  // Simulación de login por teléfono (en desarrollo/demo)
-  userPhone: optional("USER_PHONE"),
-  userToken: optional("USER_TOKEN"),
+  // WhatsApp Cloud API — compartidos por todas las cuentas de WhatsApp (1 solo Meta App/webhook).
+  whatsappAppSecret: optional("WHATSAPP_APP_SECRET"),
+  whatsappVerifyToken: optional("WHATSAPP_VERIFY_TOKEN"),
+  whatsappWebhookPort: optionalInt("WHATSAPP_WEBHOOK_PORT"),
 };
