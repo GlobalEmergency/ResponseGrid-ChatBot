@@ -25,7 +25,14 @@ const accountSchema = z.discriminatedUnion("channel", [telegramAccountSchema, wh
 const accountsFileSchema = z.array(accountSchema).min(1, "accounts.json no puede estar vacío");
 
 export function parseAccounts(rawJson: string): Account[] {
-  const parsed = accountsFileSchema.parse(JSON.parse(rawJson));
+  let data: unknown;
+  try {
+    data = JSON.parse(rawJson);
+  } catch (err) {
+    throw new Error(`accounts.json no es JSON válido: ${(err as Error).message}`);
+  }
+
+  const parsed = accountsFileSchema.parse(data);
 
   const seenIds = new Set<string>();
   for (const account of parsed) {

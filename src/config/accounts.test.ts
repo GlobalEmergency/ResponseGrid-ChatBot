@@ -52,4 +52,14 @@ test("parseAccounts", async (t) => {
   await t.test("rechaza un array vacío", () => {
     assert.throws(() => parseAccounts("[]"));
   });
+
+  await t.test("rechaza JSON malformado con mensaje claro", () => {
+    assert.throws(() => parseAccounts("{invalid json"), (err) => {
+      return (err as Error).message.includes("accounts.json no es JSON válido");
+    });
+  });
+
+  await t.test("rechaza un top-level JSON no-array", () => {
+    assert.throws(() => parseAccounts("{}"));
+  });
 });
