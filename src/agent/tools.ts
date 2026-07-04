@@ -1,7 +1,13 @@
 import { RunContext, tool } from "@openai/agents";
 import { z } from "zod";
-import { env } from "../config/env.js";
 import type { AgentContext } from "./context.js";
+import {
+  TrustedAuthClient,
+  PhoneNotFoundError,
+  EmailAlreadyExistsError,
+} from "../infrastructure/responsegrid/trusted-auth-client.js";
+
+const trustedAuthClient = new TrustedAuthClient();
 
 const resourceTypeSchema = z.enum([
   "collection_point",
@@ -95,17 +101,7 @@ async function resolveEmergencyId(
     return input.emergencyId;
   }
 
-  if (env.responsegridDefaultEmergencyId) {
-    return env.responsegridDefaultEmergencyId;
-  }
-
-  const slug = input.emergencySlug ?? env.responsegridDefaultEmergencySlug;
-
-  if (!slug) {
-    throw new Error(
-      "Falta emergencyId o emergencySlug. Configura RESPONSEGRID_DEFAULT_EMERGENCY_ID/SLUG o indícalo en el mensaje.",
-    );
-  }
+  const slug = input.emergencySlug ?? context.account.emergencySlug;
 
   const emergency = await context.apiClient.request<{ id: string }>(
     "GET",
@@ -578,14 +574,67 @@ export const rgGetNotifications = tool({
 export const rgRequestUserLogin = tool({
   name: "rg_request_user_login",
   description:
-    "Solicita al usuario que inicie sesión en Telegram compartiendo su contacto para acceder a recursos protegidos en ResponseGrid. Úsala cuando una llamada devuelva 401 Unauthorized o el usuario quiera identificarse.",
+    "Solicita o resuelve el inicio de sesión del usuario. Si ya hay un teléfono verificado disponible, intenta autenticarlo directamente contra ResponseGrid. Úsala cuando una llamada devuelva 401 Unauthorized o el usuario quiera identificarse.",
   parameters: z.object({}),
   execute: async (_input, runContext?: RunContext<AgentContext>) => {
-    const context = runContext?.context;
-    if (context) {
+    const context = getContext(runContext);
+
+    if (!context.verifiedPhone) {
       context.showLoginButton = true;
+      return "Se ha solicitado el inicio de sesión. Muestra un mensaje al usuario indicándole que presione el botón 'Compartir mi teléfono 📱' que ha aparecido en su teclado para autenticarse.";
     }
-    return "Se ha solicitado el inicio de sesión. Muestra un mensaje al usuario indicándole que presione el botón 'Compartir mi teléfono 📱' que ha aparecido en su teclado para autenticarse.";
+
+    try {
+      const result = await trustedAuthClient.loginByPhone(context.account, context.verifiedPhone);
+      context.authenticated = true;
+      context.authenticatedToken = result.accessToken;
+      return `Autenticado con éxito como ${result.user.name} (${result.user.email}).`;
+    } catch (error) {
+      if (error instanceof PhoneNotFoundError) {
+        return "No existe ninguna cuenta de ResponseGrid con este teléfono. Pide al usuario su nombre completo y su email, muéstrale que debe aceptar los términos y la política de privacidad de ResponseGrid, y pídele que confirme explícitamente que los acepta. En cuanto tengas los tres datos y la confirmación explícita, llama a la tool rg_register_by_phone.";
+      }
+      throw error;
+    }
+  },
+});
+
+export const rgRegisterByPhone = tool({
+  name: "rg_register_by_phone",
+  description:
+    "Da de alta una cuenta nueva de ResponseGrid a partir del teléfono ya verificado del usuario, cuando rg_request_user_login ha respondido que no existe cuenta. Requiere que el usuario haya confirmado explícitamente que acepta los términos y la política de privacidad antes de llamarla.",
+  parameters: z.object({
+    name: z.string().min(2).describe("Nombre completo del usuario."),
+    email: z.string().email().describe("Email del usuario."),
+    acceptedTerms: z
+      .boolean()
+      .describe("true solo si el usuario ha confirmado explícitamente que acepta términos y privacidad."),
+  }),
+  execute: async (input, runContext?: RunContext<AgentContext>) => {
+    const context = getContext(runContext);
+
+    if (!context.verifiedPhone) {
+      throw new Error("No hay un teléfono verificado en este chat; no se puede dar de alta.");
+    }
+
+    if (!input.acceptedTerms) {
+      return "No puedo crear la cuenta sin que el usuario confirme explícitamente que acepta los términos y la política de privacidad. Pídeselo de nuevo antes de reintentar.";
+    }
+
+    try {
+      const result = await trustedAuthClient.registerByPhone(context.account, {
+        phone: context.verifiedPhone,
+        name: input.name,
+        email: input.email,
+      });
+      context.authenticated = true;
+      context.authenticatedToken = result.accessToken;
+      return `Cuenta creada y autenticada con éxito como ${result.user.name} (${result.user.email}).`;
+    } catch (error) {
+      if (error instanceof EmailAlreadyExistsError) {
+        return "Ya existe una cuenta de ResponseGrid con ese email. Pide al usuario un email distinto.";
+      }
+      throw error;
+    }
   },
 });
 
@@ -658,6 +707,7 @@ export const agentTools = [
   rgValidateNeed,
   rgGetNotifications,
   rgRequestUserLogin,
+  rgRegisterByPhone,
   rgGeocode,
   rgSearchSupplies,
 ];
