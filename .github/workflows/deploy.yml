@@ -1,0 +1,48 @@
+name: CI y deploy a srv07
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+
+  deploy:
+    # Solo despliega en push a main (no en PRs), y solo si CI pasó.
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-srv07
+      cancel-in-progress: false
+    steps:
+      - name: Deploy por SSH a srv07
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SRV07_HOST }}
+          username: ${{ secrets.SRV07_USER }}
+          key: ${{ secrets.SRV07_SSH_KEY }}
+          port: ${{ secrets.SRV07_PORT }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.SRV07_DEPLOY_PATH }}"
+            git fetch --all --prune
+            git reset --hard origin/main
+            npm ci
+            npm run build
+            pm2 startOrReload ecosystem.config.cjs --update-env
+            pm2 save
