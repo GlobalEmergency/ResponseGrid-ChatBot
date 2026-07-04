@@ -1,0 +1,6 @@
+services:
+  telegram-openai-agent:
+    build: .
+    env_file:
+      - .env
+    restart: unless-stopped

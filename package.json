@@ -1,0 +1,32 @@
+{
+  "name": "telegram-openai-agent-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MVP TypeScript: Telegram bot + OpenAI Agents SDK + tools seguras para una API externa.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "mcp": "tsx watch src/mcp-server.ts",
+    "mcp:start": "node dist/mcp-server.js",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@openai/agents": "latest",
+    "dotenv": "latest",
+    "openai": "latest",
+    "telegraf": "latest",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
