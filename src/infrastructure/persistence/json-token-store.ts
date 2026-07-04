@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { AuthStore } from "../../domain/ports/auth-store.port.js";
 
 export class JsonTokenStore implements AuthStore {
@@ -6,6 +7,10 @@ export class JsonTokenStore implements AuthStore {
 
   constructor(private readonly filePath: string) {
     this.cache = new Map<string, string>();
+    const dir = dirname(this.filePath);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
     this.load();
   }
 
