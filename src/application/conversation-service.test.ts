@@ -76,4 +76,20 @@ test("ConversationService", async (t) => {
 
     assert.strictEqual(authStore.get("acc-1:222"), "jwt-nuevo");
   });
+
+  await t.test("usa el fallback cuando finalOutput es undefined", async () => {
+    const authStore = makeFakeAuthStore();
+    const service = new ConversationService(
+      { getSession: () => makeFakeSession(), authStore },
+      async () => ({ finalOutput: undefined }) as any,
+    );
+    const { channel, sent } = makeFakeChannel();
+
+    await service.handle({ account, chatId: "333", text: "test" }, channel);
+
+    assert.strictEqual(sent.length, 1);
+    assert.strictEqual(sent[0].type, "text");
+    assert.strictEqual(sent[0].chatId, "333");
+    assert.strictEqual(sent[0].text, "No he recibido respuesta del agente.");
+  });
 });

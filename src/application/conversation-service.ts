@@ -46,7 +46,7 @@ export class ConversationService {
       this.deps.authStore.set(key, context.authenticatedToken);
     }
 
-    await this.dispatchReply(chatId, context, channel, String(result.finalOutput));
+    await this.dispatchReply(chatId, context, channel, result.finalOutput == null ? "" : String(result.finalOutput));
   }
 
   private describeNonTextInbound(inbound: InboundMessage): string {
