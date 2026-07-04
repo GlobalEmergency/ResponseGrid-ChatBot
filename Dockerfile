@@ -1,3 +1,5 @@
+# Este Dockerfile es solo para desarrollo/pruebas locales.
+# El despliegue en srv07 usa PM2 directo (ver ecosystem.config.cjs y README § Despliegue).
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package*.json ./

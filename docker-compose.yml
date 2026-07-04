@@ -1,3 +1,4 @@
+# Solo para desarrollo/pruebas locales. srv07 despliega con PM2 (ver ecosystem.config.cjs).
 services:
   telegram-openai-agent:
     build: .

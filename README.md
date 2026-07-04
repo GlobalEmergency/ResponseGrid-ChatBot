@@ -231,6 +231,29 @@ Este proyecto está pensado como MVP funcional, pero con algunas cautelas:
 - No hay WhatsApp todavía, pero la estructura lo permite.
 - No hay geocodificación automática: si el usuario da una dirección sin coordenadas, el agente debe preguntarlas o tendrás que añadir una tool de geocoding.
 
+## 10. Despliegue en srv07 (Plesk + PM2)
+
+1. Subir el código (sin `node_modules`, sin `.env`, sin `accounts.json`) y ejecutar `npm ci && npm run build`.
+2. Subir `.env` y `accounts.json` directamente al servidor (gestor de ficheros de Plesk o `scp`) — nunca por git.
+3. Arrancar con PM2:
+   ```bash
+   pm2 start ecosystem.config.cjs
+   pm2 save
+   pm2 startup   # una sola vez, para persistir tras reinicio del servidor
+   ```
+4. En Plesk, crear el subdominio `responsegrid-bot.globalemergency.online` y, en "Apache & nginx Settings", añadir como directiva nginx adicional:
+   ```
+   location /webhook/whatsapp {
+     proxy_pass http://127.0.0.1:8787;
+     proxy_set_header Host $host;
+     proxy_set_header X-Real-IP $remote_addr;
+   }
+   ```
+5. Activar SSL (Let's Encrypt) para `responsegrid-bot.globalemergency.online` desde Plesk — obligatorio, Meta Cloud API exige HTTPS para el webhook.
+6. En Meta for Developers, configurar el webhook con `https://responsegrid-bot.globalemergency.online/webhook/whatsapp` y el mismo `WHATSAPP_VERIFY_TOKEN` que en `.env`.
+
+El `Dockerfile`/`docker-compose.yml` de este repo son solo para desarrollo local; no se usan en `srv07`.
+
 ## 9. Pasar luego a WhatsApp
 
 La parte importante del agente está separada:
