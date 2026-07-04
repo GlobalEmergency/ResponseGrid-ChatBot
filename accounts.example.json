@@ -1,0 +1,17 @@
+[
+  {
+    "id": "terremoto-venezuela-telegram",
+    "channel": "telegram",
+    "emergencySlug": "terremoto-venezuela-2026",
+    "apiToken": "rg_live_pon-el-token-de-esta-cuenta",
+    "telegramBotToken": "123456789:AA-pon-tu-token-de-botfather"
+  },
+  {
+    "id": "terremoto-venezuela-whatsapp",
+    "channel": "whatsapp",
+    "emergencySlug": "terremoto-venezuela-2026",
+    "apiToken": "rg_live_pon-el-token-de-esta-cuenta",
+    "whatsappPhoneNumberId": "pon-el-phone-number-id",
+    "whatsappAccessToken": "pon-el-access-token-de-meta"
+  }
+]
