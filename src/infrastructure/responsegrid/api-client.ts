@@ -1,14 +1,13 @@
-import { env } from "../config/env.js";
+import { env } from "../../config/env.js";
 
 export type HttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
-
 export type QueryParams = Record<string, string | number | boolean | null | undefined>;
 
 export class ApiClient {
   constructor(
+    private readonly token: string | undefined,
+    private readonly authMode: "bearer" | "api-key" = "api-key",
     private readonly baseUrl: string | undefined = env.apiBaseUrl,
-    private readonly token: string | undefined = env.apiToken,
-    private readonly authMode: "bearer" | "api-key" = env.apiAuthMode,
   ) {}
 
   async request<TResponse = unknown>(
@@ -20,8 +19,7 @@ export class ApiClient {
     if (!this.baseUrl) {
       return {
         mock: true,
-        message:
-          "API_BASE_URL no está configurada. Esta es una respuesta simulada para desarrollo.",
+        message: "API_BASE_URL no está configurada. Esta es una respuesta simulada para desarrollo.",
         method,
         path,
         query,
@@ -29,9 +27,7 @@ export class ApiClient {
       } as TResponse;
     }
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
 
     if (this.token) {
       if (this.authMode === "api-key") {
@@ -41,15 +37,12 @@ export class ApiClient {
       }
     }
 
-    const url = new URL(
-      `${this.baseUrl.replace(/\/$/, "")}/${path.replace(/^\//, "")}`,
-    );
+    const url = new URL(`${this.baseUrl.replace(/\/$/, "")}/${path.replace(/^\//, "")}`);
 
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value === undefined || value === null || value === "") {
         continue;
       }
-
       url.searchParams.set(key, String(value));
     }
 
@@ -64,9 +57,7 @@ export class ApiClient {
     }
 
     const contentType = response.headers.get("content-type") ?? "";
-    const payload = contentType.includes("application/json")
-      ? await response.json()
-      : await response.text();
+    const payload = contentType.includes("application/json") ? await response.json() : await response.text();
 
     if (!response.ok) {
       throw new Error(
