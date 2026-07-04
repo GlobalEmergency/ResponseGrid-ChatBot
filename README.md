@@ -1,6 +1,6 @@
-# Telegram + OpenAI Agents SDK + ResponseGrid API
+# Telegram + WhatsApp + OpenAI Agents SDK + ResponseGrid API
 
-MVP en TypeScript para probar un agente IA conectado a la API real de ResponseGrid usando Telegram como canal de texto y voz.
+Agente IA multi-cuenta conectado a la API real de ResponseGrid, con Telegram y WhatsApp como canales de texto y voz. Cada cuenta (una emergencia, un canal) se configura de forma independiente en `accounts.json`.
 
 La API usada por defecto es:
 
@@ -17,34 +17,36 @@ https://api.responsegrid.app/docs
 
 ## Qué incluye
 
-- Bot de Telegram con `telegraf`.
+- Bots de Telegram (`telegraf`, long polling) y webhook de WhatsApp Cloud API, uno por cuenta.
+- Soporte multi-cuenta: varias emergencias y varios canales corriendo en el mismo proceso, definidos en `accounts.json`.
 - OpenAI Agents SDK para TypeScript.
 - Tools específicas para ResponseGrid.
-- Transcripción de notas de voz de Telegram.
-- Memoria por chat con `MemorySession`.
+- Transcripción de notas de voz (Telegram y WhatsApp).
+- Memoria por chat persistida en disco (`FileSessionRepository`).
 - Cliente HTTP compatible con `Authorization: Bearer` y `X-API-Key`.
-- Docker y `docker-compose`.
-- Estructura preparada para añadir WhatsApp después.
+- Docker y `docker-compose` (solo para desarrollo local).
 
 ## Arquitectura
 
 ```text
-Telegram texto/audio
-   ↓
-Telegraf bot, long polling
-   ↓
-Transcripción si es nota de voz
-   ↓
-OpenAI Agent
-   ↓
-Tools ResponseGrid
-   ↓
-ResponseGrid API
-   ↓
-Respuesta a Telegram
+Telegram texto/audio          WhatsApp texto/audio/ubicación
+   ↓                              ↓
+Telegraf bot, long polling    Webhook HTTP (firma HMAC + verify token)
+   ↓                              ↓
+        Transcripción si es nota de voz
+                    ↓
+              OpenAI Agent
+                    ↓
+            Tools ResponseGrid
+                    ↓
+             ResponseGrid API
+                    ↓
+      Respuesta al canal de origen
 ```
 
-## 1. Crear bot en Telegram
+## 1. Crear las credenciales de cada canal
+
+### Telegram
 
 Habla con `@BotFather` en Telegram:
 
@@ -52,9 +54,19 @@ Habla con `@BotFather` en Telegram:
 /newbot
 ```
 
-Guarda el token que te da.
+Guarda el token que te da (`telegramBotToken` en `accounts.json`).
+
+### WhatsApp (Meta Cloud API)
+
+Crea una app de WhatsApp Business en [Meta for Developers](https://developers.facebook.com/) y anota:
+
+- `whatsappPhoneNumberId` (el Phone Number ID del número de prueba/producción).
+- `whatsappAccessToken` (token de acceso permanente o del sistema).
+- El `App Secret` de la app de Meta (va en `.env` como `WHATSAPP_APP_SECRET`, es compartido por todas las cuentas de WhatsApp).
 
 ## 2. Configurar variables
+
+### `.env` — solo configuración global, compartida por todas las cuentas
 
 Copia el ejemplo:
 
@@ -66,22 +78,38 @@ Edita `.env`:
 
 ```env
 OPENAI_API_KEY=sk-...
-TELEGRAM_BOT_TOKEN=123456789:AA...
+# Opcional. Si lo dejas vacío, el SDK usará su modelo por defecto.
+OPENAI_MODEL=
 
 API_BASE_URL=https://api.responsegrid.app
 
-# Usa api-key si tienes una service account de ResponseGrid.
-API_AUTH_MODE=api-key
-API_TOKEN=rg_live_...
-
-# O usa bearer si vas a usar JWT de usuario:
-# API_AUTH_MODE=bearer
-# API_TOKEN=eyJhbGciOi...
-
-# Opcional, pero muy recomendable para operar por Telegram sin repetir IDs.
-RESPONSEGRID_DEFAULT_EMERGENCY_SLUG=terremoto-venezuela-2026
-# RESPONSEGRID_DEFAULT_EMERGENCY_ID=...
+# Solo si tienes alguna cuenta channel=whatsapp en accounts.json:
+WHATSAPP_APP_SECRET=
+WHATSAPP_VERIFY_TOKEN=
+WHATSAPP_WEBHOOK_PORT=8787
 ```
+
+### `accounts.json` — credenciales por cuenta (una emergencia + un canal)
+
+Copia el ejemplo:
+
+```bash
+cp accounts.example.json accounts.json
+```
+
+Cada entrada del array es una cuenta independiente:
+
+| Campo | Descripción |
+|---|---|
+| `id` | Identificador único de la cuenta (uso interno, para logs y sesiones). |
+| `channel` | `"telegram"` o `"whatsapp"`. |
+| `emergencySlug` | Slug de la emergencia de ResponseGrid a la que se conecta esta cuenta. |
+| `apiToken` | Token de ResponseGrid (`rg_live_...`) de la service account de esta cuenta. |
+| `telegramBotToken` | Solo si `channel: "telegram"`. Token de BotFather. |
+| `whatsappPhoneNumberId` | Solo si `channel: "whatsapp"`. Phone Number ID de Meta. |
+| `whatsappAccessToken` | Solo si `channel: "whatsapp"`. Access token de Meta. |
+
+No metas `accounts.json` en Git (ya está en `.gitignore`); solo el `accounts.example.json` con placeholders.
 
 ## 3. Ejecutar en local
 
@@ -90,7 +118,7 @@ npm install
 npm run dev
 ```
 
-Luego escribe a tu bot en Telegram.
+Si tienes cuentas de Telegram, escribe a tu bot en Telegram. Si tienes cuentas de WhatsApp, necesitas exponer el puerto del webhook (p.ej. con un túnel) para que Meta pueda llamarlo; ver la sección de despliegue más abajo para la configuración de producción.
 
 Pruebas sugeridas:
 
@@ -170,7 +198,7 @@ rg_validate_need
 rg_get_notifications
 ```
 
-## 6. Ejemplos de uso por Telegram
+## 6. Ejemplos de uso (Telegram o WhatsApp)
 
 ### Buscar recursos
 
@@ -225,11 +253,27 @@ Este proyecto está pensado como MVP funcional, pero con algunas cautelas:
 
 ## 8. Limitaciones actuales
 
-- La memoria es `MemorySession`; se pierde al reiniciar el proceso.
-- No hay vinculación Telegram → usuario interno todavía.
 - No hay panel de revisión ni auditoría persistente.
-- No hay WhatsApp todavía, pero la estructura lo permite.
 - No hay geocodificación automática: si el usuario da una dirección sin coordenadas, el agente debe preguntarlas o tendrás que añadir una tool de geocoding.
+
+## 9. Estructura del código
+
+El proyecto sigue una arquitectura hexagonal (DDD):
+
+```text
+src/domain/           entidades y puertos (Account, MessagingChannel, AuthStore...)
+src/application/      casos de uso (ConversationService, AccountRegistry)
+src/agent/            integración con OpenAI Agents SDK y tools de ResponseGrid
+src/audio/            transcripción de notas de voz
+src/infrastructure/
+  telegram/           bot de Telegram (adapter + bootstrap)
+  whatsapp/           webhook de WhatsApp Cloud API (adapter + servidor HTTP)
+  responsegrid/       cliente HTTP de la API de ResponseGrid
+  persistence/        sesiones y tokens en disco
+src/config/           carga de env.ts y accounts.json
+```
+
+Cada canal (Telegram, WhatsApp) implementa el mismo puerto `MessagingChannel` y comparte `ConversationService`, `ResponseGrid` y el agente de OpenAI.
 
 ## 10. Despliegue en srv07 (Plesk + PM2)
 

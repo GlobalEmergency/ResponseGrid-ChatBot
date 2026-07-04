@@ -25,6 +25,8 @@ await Promise.all(telegramBots.map((bot) => bot.launch()));
 
 const hasWhatsAppAccounts = registry.all().some((account) => account.channel === "whatsapp");
 
+let whatsappServer: import("node:http").Server | null = null;
+
 if (hasWhatsAppAccounts) {
   if (!env.whatsappAppSecret || !env.whatsappVerifyToken) {
     throw new Error(
@@ -32,7 +34,7 @@ if (hasWhatsAppAccounts) {
     );
   }
 
-  startWhatsAppWebhookServer(registry, conversationService, {
+  whatsappServer = startWhatsAppWebhookServer(registry, conversationService, {
     appSecret: env.whatsappAppSecret,
     verifyToken: env.whatsappVerifyToken,
     port: env.whatsappWebhookPort ?? 8787,
@@ -43,5 +45,10 @@ console.log(
   `ResponseGrid Agent arrancado: ${telegramBots.length} bot(s) de Telegram${hasWhatsAppAccounts ? " + webhook de WhatsApp" : ""}.`,
 );
 
-process.once("SIGINT", () => telegramBots.forEach((bot) => bot.stop("SIGINT")));
-process.once("SIGTERM", () => telegramBots.forEach((bot) => bot.stop("SIGTERM")));
+function shutdown(signal: "SIGINT" | "SIGTERM"): void {
+  telegramBots.forEach((bot) => bot.stop(signal));
+  whatsappServer?.close();
+}
+
+process.once("SIGINT", () => shutdown("SIGINT"));
+process.once("SIGTERM", () => shutdown("SIGTERM"));

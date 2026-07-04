@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,9 +9,10 @@ import type { ConversationService } from "../../application/conversation-service
 import type { WhatsAppAccount } from "../../domain/account.js";
 import { isValidWhatsAppSignature } from "./whatsapp-signature.js";
 import { WhatsAppChannelAdapter } from "./whatsapp-channel-adapter.js";
+import { GRAPH_API_VERSION } from "./graph-api.js";
+import { canonicalPhone } from "./phone.js";
 
 const WEBHOOK_PATH = "/webhook/whatsapp";
-const GRAPH_API_VERSION = "v20.0";
 
 export interface WhatsAppWebhookOptions {
   appSecret: string;
@@ -23,7 +24,7 @@ export function startWhatsAppWebhookServer(
   registry: AccountRegistry,
   conversationService: ConversationService,
   options: WhatsAppWebhookOptions,
-): void {
+): Server {
   const server = createServer((req, res) => {
     void handleRequest(req, res, registry, conversationService, options);
   });
@@ -31,6 +32,8 @@ export function startWhatsAppWebhookServer(
   server.listen(options.port, "127.0.0.1", () => {
     console.log(`Servidor de webhook de WhatsApp escuchando en 127.0.0.1:${options.port}${WEBHOOK_PATH}`);
   });
+
+  return server;
 }
 
 async function handleRequest(
@@ -136,14 +139,14 @@ async function handleMessage(
 ): Promise<void> {
   const channel = new WhatsAppChannelAdapter(account);
   const chatId = message.from as string;
-  const verifiedPhone = chatId;
+  const verifiedPhone = canonicalPhone(chatId);
 
-  if (message.type === "text") {
+  if (message.type === "text" && message.text?.body) {
     await conversationService.handle({ account, chatId, text: message.text.body, verifiedPhone }, channel);
     return;
   }
 
-  if (message.type === "audio") {
+  if (message.type === "audio" && message.audio?.id) {
     const audioPath = await downloadWhatsAppMedia(message.audio.id, account);
     try {
       const transcript = await transcribeAudioFile(audioPath);
@@ -155,7 +158,7 @@ async function handleMessage(
     return;
   }
 
-  if (message.type === "location") {
+  if (message.type === "location" && message.location) {
     const { latitude, longitude } = message.location;
     await conversationService.handle({ account, chatId, location: { latitude, longitude }, verifiedPhone }, channel);
     return;

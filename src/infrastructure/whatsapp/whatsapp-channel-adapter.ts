@@ -1,7 +1,6 @@
 import type { WhatsAppAccount } from "../../domain/account.js";
 import type { MessagingChannel, SelectionOption } from "../../domain/ports/messaging-channel.port.js";
-
-const GRAPH_API_VERSION = "v20.0";
+import { GRAPH_API_VERSION } from "./graph-api.js";
 
 export class WhatsAppChannelAdapter implements MessagingChannel {
   constructor(private readonly account: WhatsAppAccount) {}
