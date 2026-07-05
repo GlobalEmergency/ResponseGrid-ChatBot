@@ -275,52 +275,64 @@ src/config/           carga de env.ts y accounts.json
 
 Cada canal (Telegram, WhatsApp) implementa el mismo puerto `MessagingChannel` y comparte `ConversationService`, `ResponseGrid` y el agente de OpenAI.
 
-## 10. Despliegue en srv07 (Plesk + PM2)
+## 10. Despliegue en srv07 (Plesk) — automático vía GitHub Actions
 
-1. Subir el código (sin `node_modules`, sin `.env`, sin `accounts.json`) y ejecutar `npm ci && npm run build`.
-2. Subir `.env` y `accounts.json` directamente al servidor (gestor de ficheros de Plesk o `scp`) — nunca por git.
-3. Arrancar con PM2:
-   ```bash
-   pm2 start ecosystem.config.cjs
-   pm2 save
-   pm2 startup   # una sola vez, para persistir tras reinicio del servidor
-   ```
-4. En Plesk, crear el subdominio `responsegrid-bot.globalemergency.online` y, en "Apache & nginx Settings", añadir como directiva nginx adicional:
-   ```
-   location /webhook/whatsapp {
-     proxy_pass http://127.0.0.1:8787;
-     proxy_set_header Host $host;
-     proxy_set_header X-Real-IP $remote_addr;
-   }
-   ```
-5. Activar SSL (Let's Encrypt) para `responsegrid-bot.globalemergency.online` desde Plesk — obligatorio, Meta Cloud API exige HTTPS para el webhook.
-6. En Meta for Developers, configurar el webhook con `https://responsegrid-bot.globalemergency.online/webhook/whatsapp` y el mismo `WHATSAPP_VERIFY_TOKEN` que en `.env`.
+El despliegue es **automático en cada merge a `main`**. El workflow
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml):
 
-El `Dockerfile`/`docker-compose.yml` de este repo son solo para desarrollo local; no se usan en `srv07`.
+1. **CI** (siempre, también en PRs): `npm ci` + `typecheck` + `build` + `test` en Node 24.
+2. **Deploy** (solo en push a `main`, si CI pasa): construye los artefactos en el
+   runner, los copia por SSH a srv07 (`rsync`/`scp` de `dist/`, `package.json`,
+   `package-lock.json`, `ecosystem.config.cjs`) y en el servidor ejecuta
+   `npm ci --omit=dev` + `pm2 startOrReload`. No toca `.env`, `accounts.json`,
+   `.sessions/` ni `node_modules` del servidor.
 
-## 9. Pasar luego a WhatsApp
+### Secrets de GitHub necesarios (repo → Settings → Secrets and variables → Actions)
 
-La parte importante del agente está separada:
+| Secret | Valor |
+|--------|-------|
+| `SRV07_HOST` | host SSH de srv07 |
+| `SRV07_USER` | usuario de sistema Plesk del dominio (p. ej. `globalemergency.online`) |
+| `SRV07_PORT` | puerto SSH (normalmente `22`) |
+| `SRV07_SSH_KEY` | clave privada del par de deploy (la pública va en el `authorized_keys` del usuario) |
+| `SRV07_DEPLOY_PATH` | ruta del checkout en el servidor (p. ej. `/var/www/vhosts/globalemergency.online/responsegrid-bot.globalemergency.online/app`) |
 
-```text
-src/agent/
-src/api/
-src/audio/
+### Provisión del servidor (una sola vez)
+
+Node 24 y PM2 los gestiona Plesk (`/opt/plesk/node/24`). Por cada suscripción hay
+una unidad `pm2-<usuario>.service` (systemd) que resucita los procesos tras
+reinicio. El proceso corre **como el usuario de sistema del dominio**, no como root.
+
+En Plesk, el subdominio `responsegrid-bot.globalemergency.online` proxya el webhook
+al proceso local mediante una directiva nginx adicional
+(`/var/www/vhosts/system/<subdominio>/conf/vhost_nginx.conf`):
+
+```nginx
+location /webhook/whatsapp {
+  proxy_pass http://127.0.0.1:8787;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
 ```
 
-Telegram vive en:
+El SSL (Let's Encrypt) del subdominio se gestiona desde Plesk — obligatorio, Meta
+Cloud API exige HTTPS para el webhook.
 
-```text
-src/channels/telegram/
-```
+### Config del servidor (rellenar con valores reales)
 
-Cuando añadas WhatsApp, crea algo así:
+En la ruta del deploy conviven, **fuera de git**, `.env` (globales: `OPENAI_API_KEY`,
+`API_BASE_URL`, y si hay WhatsApp `WHATSAPP_APP_SECRET`/`WHATSAPP_VERIFY_TOKEN`/
+`WHATSAPP_WEBHOOK_PORT`) y `accounts.json` (una entrada por bot de Telegram o número
+de WhatsApp, con su `apiToken` de ResponseGrid y su emergencia). El proceso no
+arranca hasta que `accounts.json` tenga al menos una cuenta con credenciales válidas.
 
-```text
-src/channels/whatsapp/
-  whatsapp-webhook.ts
-  whatsapp-sender.ts
-  whatsapp-media.ts
-```
+### Webhook de WhatsApp en Meta
 
-Y reutiliza el mismo `apiAgent`.
+En Meta for Developers, configurar el webhook con
+`https://responsegrid-bot.globalemergency.online/webhook/whatsapp` y el mismo
+`WHATSAPP_VERIFY_TOKEN` que en `.env`.
+
+El `Dockerfile`/`docker-compose.yml` de este repo son solo para desarrollo local;
+no se usan en `srv07`.
