@@ -18,7 +18,12 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      # Los tests unitarios importan el módulo del agente, que valida OPENAI_API_KEY
+      # al cargarse (fail-fast en producción). En CI basta un valor dummy: ningún
+      # test hace llamadas reales a OpenAI (el `run` del agente está mockeado).
       - run: npm test
+        env:
+          OPENAI_API_KEY: test-dummy-key
 
   deploy:
     # Solo en push a main (no en PRs) y solo si CI pasó.

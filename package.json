@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "mcp": "tsx watch src/mcp-server.ts",
     "mcp:start": "node dist/mcp-server.js",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
