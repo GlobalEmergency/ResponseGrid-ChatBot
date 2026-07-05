@@ -4,6 +4,36 @@ import { MemorySession } from "@openai/agents";
 import type { Account } from "../../domain/account.js";
 import { accountKey } from "../../domain/account.js";
 
+/** Máximo de items del historial que se conservan por conversación. */
+export const MAX_SESSION_ITEMS = 60;
+
+/**
+ * Recorta el historial a los últimos `max` items para que el fichero de sesión
+ * (y el contexto reenviado al LLM) no crezca sin límite. Descarta al principio
+ * los resultados/salidas de tool "huérfanos" (cuya llamada quedó fuera del
+ * recorte), que confundirían al modelo; conserva mensajes y llamadas.
+ */
+export function pruneItems(items: any[], max: number = MAX_SESSION_ITEMS): any[] {
+  if (!Array.isArray(items) || items.length <= max) {
+    return items;
+  }
+  let trimmed = items.slice(items.length - max);
+  while (trimmed.length > 0 && isOrphanLeadingResult(trimmed[0])) {
+    trimmed = trimmed.slice(1);
+  }
+  return trimmed;
+}
+
+function isOrphanLeadingResult(item: any): boolean {
+  const type = item?.type;
+  return (
+    type === "function_call_result" ||
+    type === "function_call_output" ||
+    type === "tool_call_result" ||
+    item?.role === "tool"
+  );
+}
+
 export class FileSession extends MemorySession {
   private filePath: string;
 
@@ -41,6 +71,7 @@ export class FileSession extends MemorySession {
 
   override async addItems(items: any[]): Promise<void> {
     await super.addItems(items);
+    (this as any).items = pruneItems((this as any).items);
     this.saveState();
   }
 

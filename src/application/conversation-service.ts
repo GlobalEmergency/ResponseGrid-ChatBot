@@ -8,10 +8,13 @@ import type { MessagingChannel, SelectionOption } from "../domain/ports/messagin
 import type { ConversationStore } from "../domain/ports/conversation-store.port.js";
 import type { AuthStore } from "../domain/ports/auth-store.port.js";
 import { ApiClient } from "../infrastructure/responsegrid/api-client.js";
+import { logConversation, type ConversationLogFields } from "../infrastructure/observability/conversation-logger.js";
 
 export interface ConversationServiceDeps {
   getSession(account: Account, chatId: string): ConversationStore;
   authStore: AuthStore;
+  /** Logger estructurado de conversación (por defecto a stdout); inyectable para tests. */
+  log?: (fields: ConversationLogFields) => void;
 }
 
 type RunFn = (agent: typeof apiAgent, input: string, options: { context: AgentContext; session: ConversationStore }) => Promise<{ finalOutput: unknown }>;
@@ -23,6 +26,7 @@ export class ConversationService {
   ) {}
 
   async handle(inbound: InboundMessage, channel: MessagingChannel): Promise<void> {
+    const log = this.deps.log ?? logConversation;
     const { account, chatId } = inbound;
     const key = accountKey(account, chatId);
     const session = this.deps.getSession(account, chatId);
@@ -40,13 +44,37 @@ export class ConversationService {
 
     const userText = inbound.text ?? this.describeNonTextInbound(inbound);
 
-    const result = await this.run(apiAgent, userText, { context, session });
+    const logBase = { channel: account.channel, accountId: account.id, chatId };
+    log({ kind: "inbound", ...logBase, userText, authenticated: context.authenticated });
+
+    const startedAt = Date.now();
+    let result: { finalOutput: unknown };
+    try {
+      result = await this.run(apiAgent, userText, { context, session });
+    } catch (error) {
+      log({
+        kind: "error",
+        ...logBase,
+        ms: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
 
     if (context.authenticatedToken) {
       this.deps.authStore.set(key, context.authenticatedToken);
     }
 
-    await this.dispatchReply(chatId, context, channel, result.finalOutput == null ? "" : String(result.finalOutput));
+    const reply = result.finalOutput == null ? "" : String(result.finalOutput);
+    log({
+      kind: "turn",
+      ...logBase,
+      ms: Date.now() - startedAt,
+      reply,
+      authenticated: context.authenticated,
+    });
+
+    await this.dispatchReply(chatId, context, channel, reply);
   }
 
   private describeNonTextInbound(inbound: InboundMessage): string {

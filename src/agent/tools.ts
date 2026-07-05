@@ -7,6 +7,7 @@ import {
   EmailAlreadyExistsError,
 } from "../infrastructure/responsegrid/trusted-auth-client.js";
 import { ApiClient } from "../infrastructure/responsegrid/api-client.js";
+import { toToolJson } from "./tool-result.js";
 
 const trustedAuthClient = new TrustedAuthClient();
 
@@ -136,7 +137,8 @@ function getContext(runContext?: RunContext<AgentContext>): AgentContext {
 }
 
 function asPrettyJson(result: unknown): string {
-  return JSON.stringify(result, null, 2);
+  // Recorta listas grandes antes de meterlas al historial (coste de tokens / tamaño de sesión).
+  return toToolJson(result);
 }
 
 // ponytail: gate de autorización a nivel de tool. La API de ResponseGrid es la fuente de verdad

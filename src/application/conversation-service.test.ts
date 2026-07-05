@@ -48,7 +48,7 @@ test("ConversationService", async (t) => {
   await t.test("envía la respuesta del agente como texto por defecto", async () => {
     const authStore = makeFakeAuthStore();
     const service = new ConversationService(
-      { getSession: () => makeFakeSession(), authStore },
+      { getSession: () => makeFakeSession(), authStore, log: () => {} },
       async () => ({ finalOutput: "Hola, ¿en qué puedo ayudarte?" }) as any,
     );
     const { channel, sent } = makeFakeChannel();
@@ -64,7 +64,7 @@ test("ConversationService", async (t) => {
   await t.test("persiste el token si el agente autenticó al usuario en este turno", async () => {
     const authStore = makeFakeAuthStore();
     const service = new ConversationService(
-      { getSession: () => makeFakeSession(), authStore },
+      { getSession: () => makeFakeSession(), authStore, log: () => {} },
       async (_agent, _input, options) => {
         (options.context as any).authenticatedToken = "jwt-nuevo";
         return { finalOutput: "Autenticado" } as any;
@@ -80,7 +80,7 @@ test("ConversationService", async (t) => {
   await t.test("usa el fallback cuando finalOutput es undefined", async () => {
     const authStore = makeFakeAuthStore();
     const service = new ConversationService(
-      { getSession: () => makeFakeSession(), authStore },
+      { getSession: () => makeFakeSession(), authStore, log: () => {} },
       async () => ({ finalOutput: undefined }) as any,
     );
     const { channel, sent } = makeFakeChannel();
