@@ -1,12 +1,14 @@
 import type { WhatsAppAccount } from "../../domain/account.js";
 import type { MessagingChannel, SelectionOption } from "../../domain/ports/messaging-channel.port.js";
 import { GRAPH_API_VERSION } from "./graph-api.js";
+import { markdownToWhatsApp } from "./whatsapp-format.js";
 
 export class WhatsAppChannelAdapter implements MessagingChannel {
   constructor(private readonly account: WhatsAppAccount) {}
 
   async sendText(chatId: string, text: string): Promise<void> {
-    const chunks = text.match(/[\s\S]{1,4096}/g) ?? [text];
+    const formatted = markdownToWhatsApp(text);
+    const chunks = formatted.match(/[\s\S]{1,4096}/g) ?? [formatted];
     for (const chunk of chunks) {
       await this.callSendApi({ messaging_product: "whatsapp", to: chatId, type: "text", text: { body: chunk } });
     }
@@ -19,7 +21,7 @@ export class WhatsAppChannelAdapter implements MessagingChannel {
       type: "interactive",
       interactive: {
         type: "list",
-        body: { text },
+        body: { text: markdownToWhatsApp(text) },
         action: {
           button: "Seleccionar",
           sections: [
