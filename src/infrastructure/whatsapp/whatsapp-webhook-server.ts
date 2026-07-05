@@ -1,9 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unlink, writeFile } from "node:fs/promises";
-import { transcribeAudioFile } from "../../audio/transcribe.js";
+import { transcribeAudioFile, MAX_AUDIO_BYTES } from "../../audio/transcribe.js";
 import type { AccountRegistry } from "../../application/account-registry.js";
 import type { ConversationService } from "../../application/conversation-service.js";
 import type { WhatsAppAccount } from "../../domain/account.js";
@@ -63,12 +63,18 @@ async function handleRequest(
   res.writeHead(405).end();
 }
 
+function safeEquals(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
+}
+
 function handleVerification(url: URL, res: ServerResponse, verifyToken: string): void {
   const mode = url.searchParams.get("hub.mode");
   const token = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === verifyToken && challenge) {
+  if (mode === "subscribe" && token !== null && safeEquals(token, verifyToken) && challenge) {
     res.writeHead(200, { "Content-Type": "text/plain" }).end(challenge);
     return;
   }
@@ -148,7 +154,14 @@ async function handleMessage(
   }
 
   if (message.type === "audio" && message.audio?.id) {
-    const audioPath = await downloadWhatsAppMedia(message.audio.id, account);
+    let audioPath: string;
+    try {
+      audioPath = await downloadWhatsAppMedia(message.audio.id, account);
+    } catch (error) {
+      console.error("No se pudo descargar el audio de WhatsApp:", error);
+      await channel.sendText(chatId, "No pude procesar esa nota de voz (¿demasiado grande?). Escríbeme el texto, por favor.");
+      return;
+    }
     try {
       const transcript = await transcribeAudioFile(audioPath);
       await channel.sendText(chatId, `He entendido: "${transcript}"`);
@@ -193,7 +206,11 @@ async function downloadWhatsAppMedia(mediaId: string, account: WhatsAppAccount):
     throw new Error(`No se pudo resolver el media de WhatsApp: ${metaResponse.status}`);
   }
 
-  const meta = (await metaResponse.json()) as { url: string };
+  const meta = (await metaResponse.json()) as { url: string; file_size?: number };
+
+  if (typeof meta.file_size === "number" && meta.file_size > MAX_AUDIO_BYTES) {
+    throw new Error(`Audio de WhatsApp demasiado grande: ${meta.file_size} bytes`);
+  }
 
   const fileResponse = await fetch(meta.url, { headers: { Authorization: `Bearer ${account.whatsappAccessToken}` } });
 

@@ -9,12 +9,18 @@ import type { ConversationStore } from "../domain/ports/conversation-store.port.
 import type { AuthStore } from "../domain/ports/auth-store.port.js";
 import { ApiClient } from "../infrastructure/responsegrid/api-client.js";
 import { logConversation, type ConversationLogFields } from "../infrastructure/observability/conversation-logger.js";
+import type { RateLimiter } from "./rate-limiter.js";
+
+/** Longitud máxima de un mensaje de texto que se procesa (protege coste/abuso). */
+export const MAX_TEXT_LENGTH = 8000;
 
 export interface ConversationServiceDeps {
   getSession(account: Account, chatId: string): ConversationStore;
   authStore: AuthStore;
   /** Logger estructurado de conversación (por defecto a stdout); inyectable para tests. */
   log?: (fields: ConversationLogFields) => void;
+  /** Limitador de frecuencia por chat (opcional; si falta, no se limita). */
+  rateLimiter?: RateLimiter;
 }
 
 type RunFn = (agent: typeof apiAgent, input: string, options: { context: AgentContext; session: ConversationStore }) => Promise<{ finalOutput: unknown }>;
@@ -46,6 +52,24 @@ export class ConversationService {
 
     const logBase = { channel: account.channel, accountId: account.id, chatId };
     log({ kind: "inbound", ...logBase, userText, authenticated: context.authenticated });
+
+    // Rate limiting por chat: protege el coste (cada turno dispara al agente/OpenAI).
+    const limit = this.deps.rateLimiter?.check(key);
+    if (limit && !limit.allowed) {
+      log({ kind: "error", ...logBase, error: `rate-limited (${limit.scope})` });
+      await channel.sendText(
+        chatId,
+        "Estás enviando mensajes muy rápido. Espera un momento y vuelve a intentarlo, por favor.",
+      );
+      return;
+    }
+
+    // Límite de longitud: evita que un mensaje enorme dispare el coste del agente.
+    if (userText.length > MAX_TEXT_LENGTH) {
+      log({ kind: "error", ...logBase, error: `mensaje demasiado largo (${userText.length} chars)` });
+      await channel.sendText(chatId, "Tu mensaje es demasiado largo. Acórtalo, por favor.");
+      return;
+    }
 
     // Acuse de recibo inmediato (leído + "escribiendo…") mientras el agente procesa.
     await channel.indicateReceived(chatId, inbound.messageId).catch(() => undefined);

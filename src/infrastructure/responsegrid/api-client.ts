@@ -60,9 +60,12 @@ export class ApiClient {
     const payload = contentType.includes("application/json") ? await response.json() : await response.text();
 
     if (!response.ok) {
-      throw new Error(
-        `Error llamando a ResponseGrid: ${response.status} ${response.statusText}. Respuesta: ${JSON.stringify(payload)}`,
-      );
+      // El body crudo de la API puede llevar detalles internos: se logea aparte
+      // (solo en el servidor) y NO se incrusta en el error, que el agente podría
+      // parafrasear al usuario. El agente solo ve el código de estado.
+      const bodyPreview = typeof payload === "string" ? payload.slice(0, 500) : JSON.stringify(payload).slice(0, 500);
+      console.error(`[api-client] ${method} ${path} -> ${response.status} ${response.statusText} :: ${bodyPreview}`);
+      throw new Error(`La API de ResponseGrid devolvió ${response.status} ${response.statusText}.`);
     }
 
     return payload as TResponse;

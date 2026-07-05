@@ -30,7 +30,8 @@ export class TrustedAuthClient {
     }
 
     if (!response.ok) {
-      throw new Error(`login-by-phone falló: ${response.status} ${await response.text()}`);
+      console.error(`[trusted-auth] login-by-phone -> ${response.status} :: ${(await response.text()).slice(0, 500)}`);
+      throw new Error(`login-by-phone falló con estado ${response.status}.`);
     }
 
     return (await response.json()) as TrustedAuthResult;
@@ -57,7 +58,8 @@ export class TrustedAuthClient {
     }
 
     if (!response.ok) {
-      throw new Error(`register-by-phone falló: ${response.status} ${await response.text()}`);
+      console.error(`[trusted-auth] register-by-phone -> ${response.status} :: ${(await response.text()).slice(0, 500)}`);
+      throw new Error(`register-by-phone falló con estado ${response.status}.`);
     }
 
     return (await response.json()) as TrustedAuthResult;

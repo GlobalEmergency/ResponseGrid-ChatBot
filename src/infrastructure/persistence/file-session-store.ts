@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MemorySession } from "@openai/agents";
 import type { Account } from "../../domain/account.js";
@@ -64,6 +64,8 @@ export class FileSession extends MemorySession {
     try {
       const items = (this as any).items;
       writeFileSync(this.filePath, JSON.stringify({ items }, null, 2), "utf8");
+      // Historial de conversación (datos del usuario): restringe a solo-propietario.
+      chmodSync(this.filePath, 0o600);
     } catch (err) {
       console.error(`Error saving session file for ${this.getSessionId()}:`, err);
     }

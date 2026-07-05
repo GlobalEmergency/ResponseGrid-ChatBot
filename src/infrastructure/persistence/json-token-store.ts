@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { AuthStore } from "../../domain/ports/auth-store.port.js";
 
@@ -39,6 +39,8 @@ export class JsonTokenStore implements AuthStore {
         obj[key] = value;
       }
       writeFileSync(this.filePath, JSON.stringify(obj, null, 2), "utf8");
+      // Guarda JWT de usuario en claro: restringe a solo-propietario (servidor compartido).
+      chmodSync(this.filePath, 0o600);
     } catch (err) {
       console.error("Error saving persistent token store:", err);
     }

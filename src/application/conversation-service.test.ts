@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert";
-import { ConversationService } from "./conversation-service.js";
+import { ConversationService, MAX_TEXT_LENGTH } from "./conversation-service.js";
+import { RateLimiter } from "./rate-limiter.js";
 import type { Account } from "../domain/account.js";
 import type { MessagingChannel, SelectionOption } from "../domain/ports/messaging-channel.port.js";
 import type { AuthStore } from "../domain/ports/auth-store.port.js";
@@ -93,6 +94,49 @@ test("ConversationService", async (t) => {
     assert.strictEqual(sent[0].type, "text");
     assert.strictEqual(sent[0].chatId, "333");
     assert.strictEqual(sent[0].text, "No he recibido respuesta del agente.");
+  });
+
+  await t.test("bloquea y avisa cuando se supera el rate limit (no llama al agente)", async () => {
+    const authStore = makeFakeAuthStore();
+    let runCalls = 0;
+    const service = new ConversationService(
+      {
+        getSession: () => makeFakeSession(),
+        authStore,
+        log: () => {},
+        rateLimiter: new RateLimiter(1, 100), // 1 por minuto
+      },
+      async () => {
+        runCalls += 1;
+        return { finalOutput: "ok" } as any;
+      },
+    );
+    const { channel, sent } = makeFakeChannel();
+
+    await service.handle({ account, chatId: "555", text: "1" }, channel); // permitido
+    await service.handle({ account, chatId: "555", text: "2" }, channel); // bloqueado
+
+    assert.strictEqual(runCalls, 1, "el agente solo corre para el mensaje permitido");
+    assert.strictEqual(sent.length, 2);
+    assert.match(sent[1].text, /muy rápido/);
+  });
+
+  await t.test("rechaza mensajes demasiado largos sin llamar al agente", async () => {
+    const authStore = makeFakeAuthStore();
+    let runCalls = 0;
+    const service = new ConversationService(
+      { getSession: () => makeFakeSession(), authStore, log: () => {} },
+      async () => {
+        runCalls += 1;
+        return { finalOutput: "ok" } as any;
+      },
+    );
+    const { channel, sent } = makeFakeChannel();
+
+    await service.handle({ account, chatId: "666", text: "x".repeat(MAX_TEXT_LENGTH + 1) }, channel);
+
+    assert.strictEqual(runCalls, 0);
+    assert.match(sent[0].text, /demasiado largo/);
   });
 
   await t.test("despacha botones cuando el agente presenta opciones (context.choices)", async () => {

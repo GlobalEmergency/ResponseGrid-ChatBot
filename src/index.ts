@@ -4,6 +4,7 @@ import { env } from "./config/env.js";
 import { loadAccountsFromFile } from "./config/accounts.js";
 import { AccountRegistry } from "./application/account-registry.js";
 import { ConversationService } from "./application/conversation-service.js";
+import { RateLimiter } from "./application/rate-limiter.js";
 import { FileSessionRepository } from "./infrastructure/persistence/file-session-store.js";
 import { JsonTokenStore } from "./infrastructure/persistence/json-token-store.js";
 import { startTelegramBots } from "./infrastructure/telegram/telegram-bootstrap.js";
@@ -18,6 +19,7 @@ const authStore = new JsonTokenStore(join(process.cwd(), ".sessions", "tokens.js
 const conversationService = new ConversationService({
   getSession: (account, chatId) => sessions.getOrCreate(account, chatId),
   authStore,
+  rateLimiter: new RateLimiter(),
 });
 
 const telegramBots = startTelegramBots(registry, conversationService, sessions, authStore);

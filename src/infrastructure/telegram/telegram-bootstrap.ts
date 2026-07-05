@@ -9,7 +9,7 @@ import type { AccountRegistry } from "../../application/account-registry.js";
 import type { ConversationService } from "../../application/conversation-service.js";
 import type { FileSessionRepository } from "../persistence/file-session-store.js";
 import type { AuthStore } from "../../domain/ports/auth-store.port.js";
-import { transcribeAudioFile } from "../../audio/transcribe.js";
+import { transcribeAudioFile, MAX_AUDIO_BYTES } from "../../audio/transcribe.js";
 import { TelegramChannelAdapter } from "./telegram-channel-adapter.js";
 
 export function startTelegramBots(
@@ -50,9 +50,14 @@ function createBotForAccount(
   });
 
   bot.on("voice", async (ctx) => {
+    const voice = ctx.message.voice;
+    if (voice.file_size && voice.file_size > MAX_AUDIO_BYTES) {
+      await ctx.reply("La nota de voz es demasiado grande. Envía una más corta o escríbeme el texto, por favor.");
+      return;
+    }
     await ctx.reply("Estoy escuchando tu nota de voz...");
     const chatId = String(ctx.chat.id);
-    const fileId = ctx.message.voice.file_id;
+    const fileId = voice.file_id;
     const audioPath = await downloadTelegramFile(bot, fileId);
 
     try {
