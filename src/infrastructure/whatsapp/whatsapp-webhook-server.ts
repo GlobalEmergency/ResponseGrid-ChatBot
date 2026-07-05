@@ -140,9 +140,10 @@ async function handleMessage(
   const channel = new WhatsAppChannelAdapter(account);
   const chatId = message.from as string;
   const verifiedPhone = canonicalPhone(chatId);
+  const messageId = message.id as string | undefined;
 
   if (message.type === "text" && message.text?.body) {
-    await conversationService.handle({ account, chatId, text: message.text.body, verifiedPhone }, channel);
+    await conversationService.handle({ account, chatId, text: message.text.body, verifiedPhone, messageId }, channel);
     return;
   }
 
@@ -151,7 +152,7 @@ async function handleMessage(
     try {
       const transcript = await transcribeAudioFile(audioPath);
       await channel.sendText(chatId, `He entendido: "${transcript}"`);
-      await conversationService.handle({ account, chatId, text: transcript, verifiedPhone }, channel);
+      await conversationService.handle({ account, chatId, text: transcript, verifiedPhone, messageId }, channel);
     } finally {
       await unlink(audioPath).catch(() => undefined);
     }
@@ -160,13 +161,18 @@ async function handleMessage(
 
   if (message.type === "location" && message.location) {
     const { latitude, longitude } = message.location;
-    await conversationService.handle({ account, chatId, location: { latitude, longitude }, verifiedPhone }, channel);
+    await conversationService.handle(
+      { account, chatId, location: { latitude, longitude }, verifiedPhone, messageId },
+      channel,
+    );
     return;
   }
 
-  if (message.type === "interactive" && message.interactive?.list_reply) {
+  // Selección desde una lista o pulsación de un botón de respuesta rápida.
+  const interactiveReply = message.interactive?.list_reply ?? message.interactive?.button_reply;
+  if (message.type === "interactive" && interactiveReply) {
     await conversationService.handle(
-      { account, chatId, selectionCallback: message.interactive.list_reply.id, verifiedPhone },
+      { account, chatId, selectionCallback: interactiveReply.id, verifiedPhone, messageId },
       channel,
     );
     return;

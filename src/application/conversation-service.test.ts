@@ -35,11 +35,13 @@ function makeFakeAuthStore(initial: Record<string, string> = {}): AuthStore {
 }
 
 function makeFakeChannel() {
-  const sent: Array<{ type: string; chatId: string; text: string; options?: SelectionOption[] }> = [];
+  const sent: Array<{ type: string; chatId: string; text: string; options?: SelectionOption[]; prompt?: any }> = [];
   const channel: MessagingChannel = {
     sendText: async (chatId, text) => void sent.push({ type: "text", chatId, text }),
     sendSelection: async (chatId, text, options) => void sent.push({ type: "selection", chatId, text, options }),
+    sendChoices: async (chatId, prompt) => void sent.push({ type: "choices", chatId, text: prompt.text, prompt }),
     promptPhoneShare: async (chatId, text) => void sent.push({ type: "prompt-phone", chatId, text }),
+    indicateReceived: async () => undefined,
   };
   return { channel, sent };
 }
@@ -91,5 +93,30 @@ test("ConversationService", async (t) => {
     assert.strictEqual(sent[0].type, "text");
     assert.strictEqual(sent[0].chatId, "333");
     assert.strictEqual(sent[0].text, "No he recibido respuesta del agente.");
+  });
+
+  await t.test("despacha botones cuando el agente presenta opciones (context.choices)", async () => {
+    const authStore = makeFakeAuthStore();
+    const service = new ConversationService(
+      { getSession: () => makeFakeSession(), authStore, log: () => {} },
+      async (_agent, _input, options) => {
+        (options.context as any).choices = {
+          text: "¿Qué quieres hacer?",
+          options: [
+            { id: "inv", label: "Ver inventario" },
+            { id: "est", label: "Ver estado" },
+          ],
+        };
+        return { finalOutput: "¿Qué quieres hacer?" } as any;
+      },
+    );
+    const { channel, sent } = makeFakeChannel();
+
+    await service.handle({ account, chatId: "444", text: "gestionar" }, channel);
+
+    assert.strictEqual(sent.length, 1);
+    assert.strictEqual(sent[0].type, "choices");
+    assert.strictEqual(sent[0].prompt.options.length, 2);
+    assert.strictEqual(sent[0].prompt.options[0].id, "inv");
   });
 });

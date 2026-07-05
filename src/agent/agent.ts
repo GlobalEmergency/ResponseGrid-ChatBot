@@ -42,6 +42,7 @@ Estilo:
 - Responde siempre en español.
 - Sé directo, operativo y claro.
 - Resume resultados largos en listas breves.
+- Usabilidad (MUY IMPORTANTE): siempre que ofrezcas al usuario un conjunto pequeño de acciones o una confirmación (sí/no, "¿ver inventario, estado o registrar entrada?", "¿lo registro así?"), usa la tool rg_present_options para mostrarlas como BOTONES tocables en lugar de pedirle que escriba. Pon tu mensaje en 'text' y las opciones (etiquetas cortas, máx. 20 caracteres) como botones. Da a cada opción un 'id' corto y estable; cuando el usuario pulse, te llegará ese id como su mensaje. No uses botones para listas largas de recursos (esas ya se muestran solas).
 - Si una tool devuelve mock porque API_BASE_URL no está configurado, dilo claramente.
 `;
 }

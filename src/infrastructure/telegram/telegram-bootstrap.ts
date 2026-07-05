@@ -103,14 +103,21 @@ function createBotForAccount(
     const callbackQuery = ctx.callbackQuery;
     if (!callbackQuery || !("data" in callbackQuery)) return;
     const callbackData = callbackQuery.data;
-    if (!callbackData || !callbackData.startsWith("select_resource:")) return;
+    if (!callbackData) return;
 
-    const resourceId = callbackData.replace("select_resource:", "");
+    // Selección de recurso (lista) o botón de respuesta rápida (qr:).
+    let selectionCallback: string | undefined;
+    if (callbackData.startsWith("select_resource:")) {
+      selectionCallback = callbackData.replace("select_resource:", "");
+    } else if (callbackData.startsWith("qr:")) {
+      selectionCallback = callbackData.replace("qr:", "");
+    }
+    if (selectionCallback === undefined) return;
+
     await ctx.answerCbQuery().catch(() => undefined);
-    await ctx.reply("Procesando selección del centro...");
 
     const chatId = String(ctx.chat!.id);
-    await conversationService.handle({ account, chatId, selectionCallback: resourceId }, channel);
+    await conversationService.handle({ account, chatId, selectionCallback }, channel);
   });
 
   bot.on("message", async (ctx) => {

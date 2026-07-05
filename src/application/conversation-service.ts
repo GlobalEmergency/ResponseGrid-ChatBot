@@ -47,6 +47,9 @@ export class ConversationService {
     const logBase = { channel: account.channel, accountId: account.id, chatId };
     log({ kind: "inbound", ...logBase, userText, authenticated: context.authenticated });
 
+    // Acuse de recibo inmediato (leído + "escribiendo…") mientras el agente procesa.
+    await channel.indicateReceived(chatId, inbound.messageId).catch(() => undefined);
+
     const startedAt = Date.now();
     let result: { finalOutput: unknown };
     try {
@@ -97,6 +100,13 @@ export class ConversationService {
 
     if (context.showLoginButton) {
       await channel.promptPhoneShare(chatId, safeText);
+      return;
+    }
+
+    if (context.choices && (context.choices.options?.length || context.choices.url)) {
+      // El agente usó texto propio en la ChoicePrompt; si va vacío, usa la respuesta final.
+      const prompt = context.choices.text?.trim() ? context.choices : { ...context.choices, text: safeText };
+      await channel.sendChoices(chatId, prompt);
       return;
     }
 

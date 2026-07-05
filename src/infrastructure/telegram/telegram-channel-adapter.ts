@@ -1,5 +1,5 @@
 import type { Telegraf } from "telegraf";
-import type { MessagingChannel, SelectionOption } from "../../domain/ports/messaging-channel.port.js";
+import type { ChoicePrompt, MessagingChannel, SelectionOption } from "../../domain/ports/messaging-channel.port.js";
 
 function markdownToHtml(text: string): string {
   let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -32,6 +32,30 @@ export class TelegramChannelAdapter implements MessagingChannel {
       parse_mode: "HTML",
       reply_markup: { inline_keyboard: buttons },
     });
+  }
+
+  async sendChoices(chatId: string, prompt: ChoicePrompt): Promise<void> {
+    type InlineButton = { text: string; callback_data: string } | { text: string; url: string };
+    const rows: InlineButton[][] = [];
+    for (const o of (prompt.options ?? []).slice(0, 3)) {
+      rows.push([{ text: o.label, callback_data: `qr:${o.id}` }]);
+    }
+    if (prompt.url) {
+      rows.push([{ text: prompt.urlLabel ?? "Abrir", url: prompt.url }]);
+    }
+    if (rows.length === 0) {
+      await this.sendText(chatId, prompt.text);
+      return;
+    }
+    await this.bot.telegram.sendMessage(chatId, markdownToHtml(prompt.text), {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: rows },
+    });
+  }
+
+  async indicateReceived(chatId: string, _messageId?: string): Promise<void> {
+    // Telegram: muestra "escribiendo…" mientras se procesa. No debe tumbar el turno.
+    await this.bot.telegram.sendChatAction(chatId, "typing").catch(() => undefined);
   }
 
   async promptPhoneShare(chatId: string, text: string): Promise<void> {

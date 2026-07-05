@@ -1,5 +1,6 @@
 import type { ApiClient } from "../infrastructure/responsegrid/api-client.js";
 import type { Account } from "../domain/account.js";
+import type { ChoicePrompt } from "../domain/ports/messaging-channel.port.js";
 
 export interface AgentContext {
   channel: "telegram" | "whatsapp" | "mcp";
@@ -20,4 +21,6 @@ export interface AgentContext {
   authenticatedToken?: string;
   showLoginButton?: boolean;
   selectableResources?: Array<{ id: string; name: string }>;
+  /** Botones tocables a mostrar en la respuesta (los pone la tool rg_present_options). */
+  choices?: ChoicePrompt;
 }

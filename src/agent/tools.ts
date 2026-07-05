@@ -700,6 +700,37 @@ export const rgSearchSupplies = tool({
   },
 });
 
+export const rgPresentOptions = tool({
+  name: "rg_present_options",
+  description:
+    "Ofrece al usuario hasta 3 botones tocables para elegir la siguiente acción (en vez de que tenga que escribir). Úsala siempre que ofrezcas un conjunto pequeño y claro de opciones o una confirmación sí/no. Escribe TU respuesta normal como 'text' (será el mensaje que ve el usuario) y las opciones como botones. Etiquetas cortas (máx. 20 caracteres). No la uses para listas largas de recursos (para eso ya se muestran listas automáticamente).",
+  parameters: z.object({
+    text: z.string().describe("El mensaje/pregunta que acompaña a los botones."),
+    options: z
+      .array(
+        z.object({
+          id: z.string().describe("Identificador corto de la opción; te volverá tal cual cuando el usuario la pulse."),
+          label: z.string().describe("Texto del botón, máx. 20 caracteres."),
+        }),
+      )
+      .max(3)
+      .optional()
+      .describe("Hasta 3 botones de respuesta rápida."),
+    url: z.string().optional().describe("URL opcional para un botón que abre un enlace (por ejemplo, ver algo en la web)."),
+    urlLabel: z.string().optional().describe("Texto del botón de enlace."),
+  }),
+  execute: async (input, runContext?: RunContext<AgentContext>) => {
+    const context = getContext(runContext);
+    context.choices = {
+      text: input.text,
+      options: input.options,
+      url: input.url,
+      urlLabel: input.urlLabel,
+    };
+    return "Opciones presentadas al usuario como botones. Responde con normalidad; el usuario elegirá pulsando.";
+  },
+});
+
 export const agentTools = [
   rgGetApiIdentity,
   rgListEmergencies,
@@ -724,4 +755,5 @@ export const agentTools = [
   rgRegisterByPhone,
   rgGeocode,
   rgSearchSupplies,
+  rgPresentOptions,
 ];
