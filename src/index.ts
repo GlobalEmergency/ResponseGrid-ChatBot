@@ -21,7 +21,15 @@ const conversationService = new ConversationService({
 });
 
 const telegramBots = startTelegramBots(registry, conversationService, sessions, authStore);
-await Promise.all(telegramBots.map((bot) => bot.launch()));
+// Telegraf v4: bot.launch() no resuelve hasta que el bot se DETIENE, así que NO se puede
+// await aquí — bloquearía el arranque del webhook de WhatsApp y del resto del proceso.
+// Se lanza en segundo plano (el long polling mantiene vivo el proceso) y se registran
+// los fallos de arranque (p. ej. token inválido) sin tumbar el resto.
+for (const bot of telegramBots) {
+  bot.launch().catch((error) => {
+    console.error("Fallo al lanzar un bot de Telegram:", error);
+  });
+}
 
 const hasWhatsAppAccounts = registry.all().some((account) => account.channel === "whatsapp");
 
