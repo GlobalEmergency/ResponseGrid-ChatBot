@@ -64,7 +64,6 @@ jobs:
           username: ${{ secrets.SRV07_USER }}
           key: ${{ secrets.SRV07_SSH_KEY }}
           port: ${{ secrets.SRV07_PORT }}
-          script_stop: true
           script: |
             set -eu
             export PATH="/opt/plesk/node/24/bin:$PATH"
