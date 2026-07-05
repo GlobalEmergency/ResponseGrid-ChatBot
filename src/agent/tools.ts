@@ -6,8 +6,22 @@ import {
   PhoneNotFoundError,
   EmailAlreadyExistsError,
 } from "../infrastructure/responsegrid/trusted-auth-client.js";
+import { ApiClient } from "../infrastructure/responsegrid/api-client.js";
 
 const trustedAuthClient = new TrustedAuthClient();
+
+/**
+ * Marca el contexto como autenticado con el token de usuario recién obtenido.
+ * Cambia el apiClient a modo bearer EN EL ACTO para que las tools que se llamen
+ * después en el MISMO turno usen ya el token del usuario (si no, seguirían con la
+ * service-account y ResponseGrid devolvería 401 en endpoints de usuario).
+ * ConversationService persiste `authenticatedToken` para los turnos siguientes.
+ */
+function applyUserLogin(context: AgentContext, accessToken: string): void {
+  context.authenticated = true;
+  context.authenticatedToken = accessToken;
+  context.apiClient = new ApiClient(accessToken, "bearer");
+}
 
 const resourceTypeSchema = z.enum([
   "collection_point",
@@ -586,8 +600,7 @@ export const rgRequestUserLogin = tool({
 
     try {
       const result = await trustedAuthClient.loginByPhone(context.account, context.verifiedPhone);
-      context.authenticated = true;
-      context.authenticatedToken = result.accessToken;
+      applyUserLogin(context, result.accessToken);
       return `Autenticado con éxito como ${result.user.name} (${result.user.email}).`;
     } catch (error) {
       if (error instanceof PhoneNotFoundError) {
@@ -626,8 +639,7 @@ export const rgRegisterByPhone = tool({
         name: input.name,
         email: input.email,
       });
-      context.authenticated = true;
-      context.authenticatedToken = result.accessToken;
+      applyUserLogin(context, result.accessToken);
       return `Cuenta creada y autenticada con éxito como ${result.user.name} (${result.user.email}).`;
     } catch (error) {
       if (error instanceof EmailAlreadyExistsError) {
