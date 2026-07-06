@@ -25,7 +25,7 @@ which could reasonably be considered inappropriate.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers at **conduct@responsegrid.app**. All
+reported to the project maintainers at **info@globalemergency.online**. All
 complaints will be reviewed and investigated promptly and fairly. Maintainers
 are obligated to respect the privacy and security of the reporter.
 
