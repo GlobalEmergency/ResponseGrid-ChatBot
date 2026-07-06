@@ -181,11 +181,21 @@ async function handleMessage(
     return;
   }
 
-  // Selección desde una lista o pulsación de un botón de respuesta rápida.
+  // Selección desde una lista o pulsación de un botón de respuesta rápida (mensaje interactivo).
   const interactiveReply = message.interactive?.list_reply ?? message.interactive?.button_reply;
   if (message.type === "interactive" && interactiveReply) {
     await conversationService.handle(
       { account, chatId, selectionCallback: interactiveReply.id, verifiedPhone, messageId },
+      channel,
+    );
+    return;
+  }
+
+  // Respuesta al botón "Gestionar…" de una PLANTILLA: llega como type "button" con el texto
+  // del botón. Se pasa como texto para que el agente arranque el flujo de gestión.
+  if (message.type === "button" && message.button?.text) {
+    await conversationService.handle(
+      { account, chatId, text: message.button.text, verifiedPhone, messageId },
       channel,
     );
     return;
