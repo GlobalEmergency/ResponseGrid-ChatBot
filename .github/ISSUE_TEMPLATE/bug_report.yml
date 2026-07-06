@@ -1,0 +1,49 @@
+name: 🐛 Bug report / Reporte de error
+description: Report something that isn't working. / Reporta algo que no funciona.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks for reporting! Fill in what you can. / ¡Gracias! Rellena lo que puedas."
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened? / ¿Qué ocurrió?
+      description: Describe the bug and what you expected instead. / Describe el error y qué esperabas.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce / Pasos para reproducir
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Channel / Canal
+      options:
+        - Telegram
+        - WhatsApp
+        - Not channel-specific / No depende del canal
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment / Entorno
+      description: Node version, OS, commit/branch. / Versión de Node, SO, commit/rama.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Logs
+      description: Relevant logs. ⚠️ Redact tokens, API keys and phone numbers. / Logs relevantes. ⚠️ Oculta tokens, API keys y teléfonos.
+      render: shell
+    validations:
+      required: false

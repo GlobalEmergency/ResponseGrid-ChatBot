@@ -1,0 +1,38 @@
+name: ✨ Feature request / Propuesta
+description: Suggest an improvement or new capability. / Sugiere una mejora o capacidad.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Problema
+      description: What need or pain point does this address? / ¿Qué necesidad o dolor resuelve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution / Propuesta
+      description: What would you like to see? / ¿Qué te gustaría ver?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / Área
+      options:
+        - Agent / tools
+        - Telegram
+        - WhatsApp
+        - ResponseGrid API client
+        - Observability
+        - Docs
+        - Other / Otro
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered / Alternativas
+    validations:
+      required: false

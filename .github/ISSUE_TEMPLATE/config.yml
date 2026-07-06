@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions / Preguntas
+    url: https://github.com/GlobalEmergency/ResponseGrid-ChatBot/discussions
+    about: Ask questions or discuss ideas here. / Preguntas o ideas por aquí.
+  - name: 🔒 Security vulnerability / Vulnerabilidad
+    url: https://github.com/GlobalEmergency/ResponseGrid-ChatBot/security/advisories/new
+    about: Report security issues privately, NOT as a public issue. / Repórtalas en privado.
