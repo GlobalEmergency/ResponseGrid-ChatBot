@@ -1,9 +1,10 @@
 {
-  "name": "telegram-openai-agent-ts",
+  "name": "responsegrid-chatbot",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
-  "description": "MVP TypeScript: Telegram bot + OpenAI Agents SDK + tools seguras para una API externa.",
+  "description": "Multichannel Telegram + WhatsApp assistant (OpenAI Agents SDK) for the ResponseGrid humanitarian-aid API.",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",

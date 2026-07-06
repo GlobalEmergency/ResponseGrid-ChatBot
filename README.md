@@ -275,14 +275,14 @@ src/config/           carga de env.ts y accounts.json
 
 Cada canal (Telegram, WhatsApp) implementa el mismo puerto `MessagingChannel` y comparte `ConversationService`, `ResponseGrid` y el agente de OpenAI.
 
-## 10. Despliegue en srv07 (Plesk) — automático vía GitHub Actions
+## 10. Despliegue (Plesk + PM2) — automático vía GitHub Actions
 
 El despliegue es **automático en cada merge a `main`**. El workflow
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml):
 
 1. **CI** (siempre, también en PRs): `npm ci` + `typecheck` + `build` + `test` en Node 24.
 2. **Deploy** (solo en push a `main`, si CI pasa): construye los artefactos en el
-   runner, los copia por SSH a srv07 (`rsync`/`scp` de `dist/`, `package.json`,
+   runner, los copia por SSH al servidor (`rsync`/`scp` de `dist/`, `package.json`,
    `package-lock.json`, `ecosystem.config.cjs`) y en el servidor ejecuta
    `npm ci --omit=dev` + `pm2 startOrReload`. No toca `.env`, `accounts.json`,
    `.sessions/` ni `node_modules` del servidor.
@@ -291,11 +291,11 @@ El despliegue es **automático en cada merge a `main`**. El workflow
 
 | Secret | Valor |
 |--------|-------|
-| `SRV07_HOST` | host SSH de srv07 |
-| `SRV07_USER` | usuario de sistema Plesk del dominio (p. ej. `globalemergency.online`) |
+| `SRV07_HOST` | host SSH del servidor de despliegue |
+| `SRV07_USER` | usuario de sistema del dominio en el servidor (p. ej. `<usuario-dominio>`) |
 | `SRV07_PORT` | puerto SSH (normalmente `22`) |
 | `SRV07_SSH_KEY` | clave privada del par de deploy (la pública va en el `authorized_keys` del usuario) |
-| `SRV07_DEPLOY_PATH` | ruta del checkout en el servidor (p. ej. `/var/www/vhosts/globalemergency.online/responsegrid-bot.globalemergency.online/app`) |
+| `SRV07_DEPLOY_PATH` | ruta del checkout en el servidor (p. ej. `<ruta-de-deploy>/app`) |
 
 ### Provisión del servidor (una sola vez)
 
@@ -303,8 +303,8 @@ Node 24 y PM2 los gestiona Plesk (`/opt/plesk/node/24`). Por cada suscripción h
 una unidad `pm2-<usuario>.service` (systemd) que resucita los procesos tras
 reinicio. El proceso corre **como el usuario de sistema del dominio**, no como root.
 
-En Plesk, el subdominio `responsegrid-bot.globalemergency.online` proxya el webhook
-al proceso local mediante una directiva nginx adicional
+En Plesk, el subdominio del webhook (p. ej. `<subdominio-del-bot>`) proxya la
+petición al proceso local mediante una directiva nginx adicional
 (`/var/www/vhosts/system/<subdominio>/conf/vhost_nginx.conf`):
 
 ```nginx
@@ -331,8 +331,13 @@ arranca hasta que `accounts.json` tenga al menos una cuenta con credenciales vá
 ### Webhook de WhatsApp en Meta
 
 En Meta for Developers, configurar el webhook con
-`https://responsegrid-bot.globalemergency.online/webhook/whatsapp` y el mismo
+`https://<subdominio-del-bot>/webhook/whatsapp` y el mismo
 `WHATSAPP_VERIFY_TOKEN` que en `.env`.
 
 El `Dockerfile`/`docker-compose.yml` de este repo son solo para desarrollo local;
-no se usan en `srv07`.
+no se usan en el servidor de producción.
+
+## 11. Licencia
+
+Este proyecto se publica bajo la licencia **GNU Affero General Public License v3.0**
+(AGPL-3.0). Ver [`LICENSE`](LICENSE).
