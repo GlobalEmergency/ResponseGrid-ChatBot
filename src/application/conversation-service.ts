@@ -14,6 +14,19 @@ import type { RateLimiter } from "./rate-limiter.js";
 /** Longitud máxima de un mensaje de texto que se procesa (protege coste/abuso). */
 export const MAX_TEXT_LENGTH = 8000;
 
+/**
+ * Detecta el error de OpenAI por historial con un par de tool incompleto
+ * ("No tool call found for function call output ..."), que bloquea cada turno
+ * hasta reiniciar la sesión.
+ */
+export function isCorruptedHistoryError(message: string): boolean {
+  return (
+    /no tool call found/i.test(message) ||
+    /no tool output found/i.test(message) ||
+    /function call output/i.test(message)
+  );
+}
+
 export interface ConversationServiceDeps {
   getSession(account: Account, chatId: string): ConversationStore;
   authStore: AuthStore;
@@ -79,12 +92,26 @@ export class ConversationService {
     try {
       result = await this.run(apiAgent, userText, { context, session });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       log({
         kind: "error",
         ...logBase,
         ms: Date.now() - startedAt,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       });
+      // Red de seguridad: si el historial quedó con un par de tool incompleto,
+      // OpenAI rechaza cada turno y el usuario queda bloqueado. Reiniciamos la
+      // sesión y le pedimos que repita, en vez de fallar en silencio.
+      if (isCorruptedHistoryError(message)) {
+        await Promise.resolve(
+          (session as { clearSession?: () => Promise<void> }).clearSession?.(),
+        ).catch(() => undefined);
+        await channel.sendText(
+          chatId,
+          "Perdona, he tenido que reiniciar nuestra conversación por un problema técnico. ¿Puedes repetir tu último mensaje?",
+        );
+        return;
+      }
       throw error;
     }
 
@@ -109,7 +136,7 @@ export class ConversationService {
       return `He compartido mi ubicación actual: latitud ${inbound.location.latitude}, longitud ${inbound.location.longitude}`;
     }
     if (inbound.selectionCallback) {
-      return `He seleccionado el centro con ID: ${inbound.selectionCallback}`;
+      return `He seleccionado la opción con id: ${inbound.selectionCallback}`;
     }
     return "";
   }

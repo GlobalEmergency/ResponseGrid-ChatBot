@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert";
-import { ConversationService, MAX_TEXT_LENGTH } from "./conversation-service.js";
+import { ConversationService, MAX_TEXT_LENGTH, isCorruptedHistoryError } from "./conversation-service.js";
 import { RateLimiter } from "./rate-limiter.js";
 import type { Account } from "../domain/account.js";
 import type { MessagingChannel, SelectionOption } from "../domain/ports/messaging-channel.port.js";
@@ -163,4 +163,32 @@ test("ConversationService", async (t) => {
     assert.strictEqual(sent[0].prompt.options.length, 2);
     assert.strictEqual(sent[0].prompt.options[0].id, "inv");
   });
+});
+
+test("isCorruptedHistoryError detecta el error de historial roto", () => {
+  assert.ok(
+    isCorruptedHistoryError(
+      "400 No tool call found for function call output with call_id call_abc.",
+    ),
+  );
+  assert.ok(!isCorruptedHistoryError("429 rate limited"));
+});
+
+test("ConversationService recupera de un historial corrupto sin propagar el error", async () => {
+  const authStore = makeFakeAuthStore();
+  let cleared = false;
+  const session = { ...makeFakeSession(), clearSession: async () => void (cleared = true) } as ConversationStore;
+  const service = new ConversationService(
+    { getSession: () => session, authStore, log: () => {} },
+    async () => {
+      throw new Error("400 No tool call found for function call output with call_id call_x.");
+    },
+  );
+  const { channel, sent } = makeFakeChannel();
+
+  await service.handle({ account, chatId: "777", text: "hola" }, channel); // no debe lanzar
+
+  assert.ok(cleared, "reinicia la sesión corrupta");
+  assert.strictEqual(sent.length, 1);
+  assert.match(sent[0].text, /reiniciar/);
 });
