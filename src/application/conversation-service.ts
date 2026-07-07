@@ -10,6 +10,7 @@ import type { AuthStore } from "../domain/ports/auth-store.port.js";
 import { ApiClient } from "../infrastructure/responsegrid/api-client.js";
 import { logConversation, type ConversationLogFields } from "../infrastructure/observability/conversation-logger.js";
 import type { RateLimiter } from "./rate-limiter.js";
+import { detectGreeting, WELCOME } from "./welcome.js";
 
 /** Longitud máxima de un mensaje de texto que se procesa (protege coste/abuso). */
 export const MAX_TEXT_LENGTH = 8000;
@@ -25,6 +26,23 @@ export function isCorruptedHistoryError(message: string): boolean {
     /no tool output found/i.test(message) ||
     /function call output/i.test(message)
   );
+}
+
+/** true si la sesión no tiene historial todavía (conversación nueva). */
+async function isEmptySession(session: ConversationStore): Promise<boolean> {
+  try {
+    const items = await session.getItems();
+    return !Array.isArray(items) || items.length === 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Cuenta las tool-calls que hizo el agente en el turno (instrumentación). */
+function countToolCalls(result: unknown): number | undefined {
+  const items = (result as { newItems?: unknown[] })?.newItems;
+  if (!Array.isArray(items)) return undefined;
+  return items.filter((i) => (i as { type?: string })?.type === "tool_call_item").length;
 }
 
 export interface ConversationServiceDeps {
@@ -88,6 +106,25 @@ export class ConversationService {
     await channel.indicateReceived(chatId, inbound.messageId).catch(() => undefined);
 
     const startedAt = Date.now();
+
+    // Fast-path de bienvenida: si un usuario NUEVO (sesión vacía) solo saluda,
+    // respondemos con la bienvenida precomputada + botones sin invocar al modelo.
+    // Es el turno más lento hoy y no necesita razonamiento.
+    const greetingLang = detectGreeting(inbound.text);
+    if (greetingLang && (await isEmptySession(session))) {
+      const welcome = WELCOME[greetingLang];
+      log({
+        kind: "turn",
+        ...logBase,
+        ms: Date.now() - startedAt,
+        reply: welcome.text,
+        fastPath: true,
+        authenticated: context.authenticated,
+      });
+      await channel.sendChoices(chatId, { text: welcome.text, options: welcome.options });
+      return;
+    }
+
     let result: { finalOutput: unknown };
     try {
       result = await this.run(apiAgent, userText, { context, session });
@@ -125,6 +162,7 @@ export class ConversationService {
       ...logBase,
       ms: Date.now() - startedAt,
       reply,
+      tools: countToolCalls(result),
       authenticated: context.authenticated,
     });
 

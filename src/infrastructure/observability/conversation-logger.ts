@@ -16,6 +16,10 @@ export interface ConversationLogFields {
   userText?: string;
   reply?: string;
   ms?: number;
+  /** Nº de tool-calls que hizo el agente en este turno (instrumentación de latencia). */
+  tools?: number;
+  /** true si el turno se resolvió por fast-path (sin invocar al modelo). */
+  fastPath?: boolean;
   error?: string;
 }
 
@@ -45,6 +49,8 @@ export function buildLogLine(
     ...(fields.userText !== undefined ? { user: truncate(fields.userText) } : {}),
     ...(fields.reply !== undefined ? { reply: truncate(fields.reply) } : {}),
     ...(fields.ms !== undefined ? { ms: fields.ms } : {}),
+    ...(fields.tools !== undefined ? { tools: fields.tools } : {}),
+    ...(fields.fastPath !== undefined ? { fastPath: fields.fastPath } : {}),
     ...(fields.error !== undefined ? { error: truncate(fields.error, 500) } : {}),
   };
 }
