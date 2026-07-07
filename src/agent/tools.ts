@@ -494,6 +494,42 @@ export const rgUpdateResourceStatus = tool({
   },
 });
 
+export const rgVerifyResource = tool({
+  name: "rg_verify_resource",
+  description:
+    "Verifica un recurso (paso previo a publicarlo). Requiere ser coordinador/verificador de la emergencia. Úsala cuando un recurso gestionado NO aparece como público y hay que hacerlo visible: primero rg_verify_resource y luego rg_publish_resource.",
+  parameters: z.object({
+    resourceId: z.string().uuid(),
+  }),
+  execute: async (input, runContext?: RunContext<AgentContext>) => {
+    const context = getContext(runContext);
+    requireAuth(context);
+    const result = await context.apiClient.request(
+      "POST",
+      `/resources/${input.resourceId}/verify`,
+    );
+    return asPrettyJson(result);
+  },
+});
+
+export const rgPublishResource = tool({
+  name: "rg_publish_resource",
+  description:
+    "Publica un recurso para que sea visible públicamente. Requiere ser verificador/coordinador de la emergencia. Es el paso que hace que un recurso gestionado aparezca en el listado público y tenga URL pública (normalmente tras rg_verify_resource).",
+  parameters: z.object({
+    resourceId: z.string().uuid(),
+  }),
+  execute: async (input, runContext?: RunContext<AgentContext>) => {
+    const context = getContext(runContext);
+    requireAuth(context);
+    const result = await context.apiClient.request(
+      "POST",
+      `/resources/${input.resourceId}/publish`,
+    );
+    return asPrettyJson(result);
+  },
+});
+
 export const rgListPublicNeeds = tool({
   name: "rg_list_public_needs",
   description:
@@ -801,6 +837,8 @@ export const agentTools = [
   rgPreregisterDonation,
   rgSubmitOffer,
   rgUpdateResourceStatus,
+  rgVerifyResource,
+  rgPublishResource,
   rgListPublicNeeds,
   rgFindNearbyNeeds,
   rgCreateNeed,
