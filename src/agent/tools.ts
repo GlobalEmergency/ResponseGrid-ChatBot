@@ -403,7 +403,7 @@ export const rgUpdateResourceInventory = tool({
 export const rgRecordInventoryEntry = tool({
   name: "rg_record_inventory_entry",
   description:
-    "Registra una entrada manual de inventario recibida en un punto. Útil para 'hemos recibido 20 cajas de agua'.",
+    "SOLO para el personal que GESTIONA el punto: registra stock ya recibido en ese punto ('hemos recibido 20 cajas de agua'). Requiere el permiso intake:receive. NO la uses cuando alguien quiere DONAR o LLEVAR material: para eso usa rg_preregister_donation (público) o rg_submit_offer.",
   parameters: z.object({
     resourceId: z.string().uuid(),
     items: z.array(supplyLineSchema).min(1),
@@ -415,6 +415,60 @@ export const rgRecordInventoryEntry = tool({
       "POST",
       `/resources/${input.resourceId}/inventory-entries`,
       { items: input.items },
+    );
+    return asPrettyJson(result);
+  },
+});
+
+export const rgPreregisterDonation = tool({
+  name: "rg_preregister_donation",
+  description:
+    "PÚBLICO (no requiere login). Pre-registra una donación que una persona quiere LLEVAR a un punto de acopio concreto. Úsala cuando alguien dice 'quiero llevar/donar X'. Necesita targetResourceId: si no lo sabes, ayuda al usuario a elegir un punto (rg_find_nearby_resources / rg_list_public_resources) antes. Devuelve un código de seguimiento de la donación.",
+  parameters: z.object({
+    ...emergencyRefSchema,
+    targetResourceId: z
+      .string()
+      .uuid()
+      .describe("ID del punto de acopio destino donde la persona entregará la donación."),
+    donorName: z.string().min(2).describe("Nombre de quien dona."),
+    donorPhone: z.string().optional().describe("Teléfono de contacto del donante, si lo da."),
+    donorEmail: z.string().email().optional().describe("Email del donante, si lo da."),
+    items: z.array(supplyLineSchema).min(1),
+  }),
+  execute: async (input, runContext?: RunContext<AgentContext>) => {
+    const context = getContext(runContext);
+    const emergencyId = await resolveEmergencyId(context, input);
+    const { emergencyId: _eid, emergencySlug: _slug, ...payload } = input;
+    const result = await context.apiClient.request(
+      "POST",
+      `/emergencies/${emergencyId}/donation-intakes`,
+      payload,
+    );
+    return asPrettyJson(result);
+  },
+});
+
+export const rgSubmitOffer = tool({
+  name: "rg_submit_offer",
+  description:
+    "Envía una OFERTA de donación de un donante autenticado a la emergencia (no ligada a un punto concreto). Requiere login. Úsala cuando un usuario autenticado ofrece materiales de forma general. La ubicación debe ser real (dirección + coordenadas reales del donante); nunca inventes coordenadas.",
+  parameters: z.object({
+    ...emergencyRefSchema,
+    items: z.array(supplyLineSchema).min(1),
+    location: locationSchema.describe("Ubicación real desde donde se ofrece la donación."),
+    targetNeedId: z.string().uuid().optional().describe("Necesidad concreta a la que se dirige la oferta, si aplica."),
+    notes: z.string().optional(),
+    author: authorSchema.optional(),
+  }),
+  execute: async (input, runContext?: RunContext<AgentContext>) => {
+    const context = getContext(runContext);
+    requireAuth(context);
+    const emergencyId = await resolveEmergencyId(context, input);
+    const { emergencyId: _eid, emergencySlug: _slug, ...payload } = input;
+    const result = await context.apiClient.request(
+      "POST",
+      `/emergencies/${emergencyId}/offers`,
+      payload,
     );
     return asPrettyJson(result);
   },
@@ -744,6 +798,8 @@ export const agentTools = [
   rgGetResourceInventory,
   rgUpdateResourceInventory,
   rgRecordInventoryEntry,
+  rgPreregisterDonation,
+  rgSubmitOffer,
   rgUpdateResourceStatus,
   rgListPublicNeeds,
   rgFindNearbyNeeds,
