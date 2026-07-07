@@ -56,7 +56,7 @@ test("ConversationService", async (t) => {
     );
     const { channel, sent } = makeFakeChannel();
 
-    await service.handle({ account, chatId: "111", text: "hola" }, channel);
+    await service.handle({ account, chatId: "111", text: "busca agua cerca" }, channel);
 
     assert.strictEqual(sent.length, 1);
     assert.strictEqual(sent[0].type, "text");
@@ -186,9 +186,47 @@ test("ConversationService recupera de un historial corrupto sin propagar el erro
   );
   const { channel, sent } = makeFakeChannel();
 
-  await service.handle({ account, chatId: "777", text: "hola" }, channel); // no debe lanzar
+  await service.handle({ account, chatId: "777", text: "busca agua cerca" }, channel); // no debe lanzar
 
   assert.ok(cleared, "reinicia la sesión corrupta");
   assert.strictEqual(sent.length, 1);
   assert.match(sent[0].text, /reiniciar/);
+});
+
+test("ConversationService · fast-path de bienvenida (saludo en sesión nueva) no invoca al agente", async () => {
+  const authStore = makeFakeAuthStore();
+  let runCalls = 0;
+  const service = new ConversationService(
+    { getSession: () => makeFakeSession(), authStore, log: () => {} },
+    async () => {
+      runCalls += 1;
+      return { finalOutput: "no debería llamarse" } as any;
+    },
+  );
+  const { channel, sent } = makeFakeChannel();
+
+  await service.handle({ account, chatId: "888", text: "Hola!" }, channel);
+
+  assert.strictEqual(runCalls, 0, "no invoca al modelo para un saludo nuevo");
+  assert.strictEqual(sent.length, 1);
+  assert.strictEqual(sent[0].type, "choices");
+  assert.match(sent[0].text, /ResponseGrid/);
+});
+
+test("ConversationService · con historial, un saludo SÍ va al agente", async () => {
+  const authStore = makeFakeAuthStore();
+  let runCalls = 0;
+  const session = { ...makeFakeSession(), getItems: async () => [{ type: "message" }] } as ConversationStore;
+  const service = new ConversationService(
+    { getSession: () => session, authStore, log: () => {} },
+    async () => {
+      runCalls += 1;
+      return { finalOutput: "hola de nuevo" } as any;
+    },
+  );
+  const { channel } = makeFakeChannel();
+
+  await service.handle({ account, chatId: "889", text: "hola" }, channel);
+
+  assert.strictEqual(runCalls, 1, "con contexto en curso, el saludo lo maneja el agente");
 });
