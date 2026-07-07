@@ -730,7 +730,7 @@ export const rgGeocode = tool({
 export const rgSearchSupplies = tool({
   name: "rg_search_supplies",
   description:
-    "Busca en el catálogo central de suministros/productos estandarizados (supplies) de ResponseGrid. Soporta multiidioma (pasa el 'locale' adecuado según el idioma en el que hable el usuario).",
+    "Busca en el catálogo central de suministros/productos estandarizados (supplies) de ResponseGrid. Soporta multiidioma (pasa el 'locale' adecuado según el idioma en el que hable el usuario). IMPORTANTE: 'q' es un término de AUTOCOMPLETADO (busca por palabra/prefijo, no de forma semántica): funciona con UNA palabra clave concreta (p. ej. 'bebé', 'fórmula', 'gasas', 'agua'), NO con frases completas — 'comida para bebés' puede devolver 0. Si no hay resultados, REINTENTA con un término más simple, singular o sinónimo, o filtra por categorySlug (p. ej. los productos de bebé están en 'hygiene_infantile'). No concluyas que algo no existe tras una sola búsqueda con una frase.",
   parameters: z.object({
     q: z.string().optional().describe("Texto libre para buscar en el catálogo (por ejemplo: 'agua', 'colchón', 'gasas')."),
     categorySlug: z.string().optional().describe("Filtrar por slug de categoría (por ejemplo: 'water', 'shelter', 'medical_supplies', 'medicines')."),
