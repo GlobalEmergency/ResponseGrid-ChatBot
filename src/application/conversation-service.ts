@@ -28,6 +28,19 @@ export function isCorruptedHistoryError(message: string): boolean {
   );
 }
 
+/**
+ * Detecta errores transitorios (temporales) del run que merecen un reintento:
+ * 5xx / server_error de OpenAI, timeouts, cortes de red, sobrecarga.
+ */
+export function isTransientError(message: string): boolean {
+  return (
+    /server_error/i.test(message) ||
+    /\b(500|502|503|504)\b/.test(message) ||
+    /overloaded|temporarily unavailable|rate limit|too many requests/i.test(message) ||
+    /timeout|timed out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|network/i.test(message)
+  );
+}
+
 /** true si la sesión no tiene historial todavía (conversación nueva). */
 async function isEmptySession(session: ConversationStore): Promise<boolean> {
   try {
@@ -130,15 +143,10 @@ export class ConversationService {
       result = await this.run(apiAgent, userText, { context, session });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      log({
-        kind: "error",
-        ...logBase,
-        ms: Date.now() - startedAt,
-        error: message,
-      });
-      // Red de seguridad: si el historial quedó con un par de tool incompleto,
-      // OpenAI rechaza cada turno y el usuario queda bloqueado. Reiniciamos la
-      // sesión y le pedimos que repita, en vez de fallar en silencio.
+      log({ kind: "error", ...logBase, ms: Date.now() - startedAt, error: message });
+
+      // Historial con un par de tool incompleto: OpenAI rechaza cada turno y el
+      // usuario queda bloqueado. Reiniciamos la sesión y pedimos repetir.
       if (isCorruptedHistoryError(message)) {
         await Promise.resolve(
           (session as { clearSession?: () => Promise<void> }).clearSession?.(),
@@ -149,7 +157,29 @@ export class ConversationService {
         );
         return;
       }
-      throw error;
+
+      // Error transitorio (p. ej. 500 de OpenAI, timeout): reintentamos UNA vez.
+      // Antes esto se relanzaba y el usuario se quedaba sin respuesta (silencio).
+      if (isTransientError(message)) {
+        try {
+          result = await this.run(apiAgent, userText, { context, session });
+        } catch (retryError) {
+          const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+          log({ kind: "error", ...logBase, ms: Date.now() - startedAt, error: `retry-failed: ${retryMessage}` });
+          await channel.sendText(
+            chatId,
+            "Perdona, estoy teniendo un problema técnico temporal. Inténtalo de nuevo en un momento, por favor.",
+          );
+          return;
+        }
+      } else {
+        // Cualquier otro error: nunca dejar al usuario en silencio.
+        await channel.sendText(
+          chatId,
+          "Perdona, ha habido un problema procesando tu mensaje. Inténtalo de nuevo, por favor.",
+        );
+        return;
+      }
     }
 
     if (context.authenticatedToken) {

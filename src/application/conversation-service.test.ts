@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert";
-import { ConversationService, MAX_TEXT_LENGTH, isCorruptedHistoryError } from "./conversation-service.js";
+import { ConversationService, MAX_TEXT_LENGTH, isCorruptedHistoryError, isTransientError } from "./conversation-service.js";
 import { RateLimiter } from "./rate-limiter.js";
 import type { Account } from "../domain/account.js";
 import type { MessagingChannel, SelectionOption } from "../domain/ports/messaging-channel.port.js";
@@ -229,4 +229,62 @@ test("ConversationService · con historial, un saludo SÍ va al agente", async (
   await service.handle({ account, chatId: "889", text: "hola" }, channel);
 
   assert.strictEqual(runCalls, 1, "con contexto en curso, el saludo lo maneja el agente");
+});
+
+test("isTransientError", () => {
+  assert.ok(isTransientError("500 server_error"));
+  assert.ok(isTransientError("503 Service Unavailable overloaded"));
+  assert.ok(isTransientError("request failed: ETIMEDOUT"));
+  assert.ok(!isTransientError("400 bad request"));
+  assert.ok(!isTransientError("No tool call found for function call output"));
+});
+
+test("ConversationService · reintenta 1 vez ante error transitorio y responde", async () => {
+  const authStore = makeFakeAuthStore();
+  let calls = 0;
+  const service = new ConversationService(
+    { getSession: () => makeFakeSession(), authStore, log: () => {} },
+    async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("500 server_error temporal de OpenAI");
+      return { finalOutput: "ya te contesto" } as any;
+    },
+  );
+  const { channel, sent } = makeFakeChannel();
+  await service.handle({ account, chatId: "901", text: "consulta" }, channel);
+  assert.strictEqual(calls, 2, "reintenta una vez");
+  assert.strictEqual(sent.length, 1);
+  assert.match(sent[0].text, /ya te contesto/);
+});
+
+test("ConversationService · si el reintento también falla, avisa sin lanzar", async () => {
+  const authStore = makeFakeAuthStore();
+  let calls = 0;
+  const service = new ConversationService(
+    { getSession: () => makeFakeSession(), authStore, log: () => {} },
+    async () => {
+      calls += 1;
+      throw new Error("503 overloaded");
+    },
+  );
+  const { channel, sent } = makeFakeChannel();
+  await service.handle({ account, chatId: "902", text: "consulta" }, channel); // no debe lanzar
+  assert.strictEqual(calls, 2);
+  assert.match(sent[0].text, /problema técnico temporal/);
+});
+
+test("ConversationService · error no transitorio: avisa sin reintentar ni lanzar", async () => {
+  const authStore = makeFakeAuthStore();
+  let calls = 0;
+  const service = new ConversationService(
+    { getSession: () => makeFakeSession(), authStore, log: () => {} },
+    async () => {
+      calls += 1;
+      throw new Error("algo raro y no transitorio");
+    },
+  );
+  const { channel, sent } = makeFakeChannel();
+  await service.handle({ account, chatId: "903", text: "consulta" }, channel);
+  assert.strictEqual(calls, 1, "no reintenta");
+  assert.match(sent[0].text, /problema procesando/);
 });
