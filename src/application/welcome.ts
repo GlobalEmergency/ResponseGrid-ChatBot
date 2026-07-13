@@ -6,17 +6,39 @@
 
 export type Lang = "es" | "en";
 
-// Saludo puro (todo el mensaje es un saludo), tolerando puntuación y repeticiones.
-const GREETING_RE =
-  /^[\s\p{P}]*(hola+|buenas(?:\s+(?:tardes|noches))?|buenos\s*d[ií]as|hey+|ey+|qu[eé]\s*tal|hi+|hello+|hey\s*there|good\s*(?:morning|afternoon|evening)|\/?start)[\s\p{P}]*$/iu;
+// Saludos como CONJUNTO de tokens normalizados (minúsculas, sin acentos ni
+// símbolos/espacios). Toleramos erratas comunes ("hlla", "ola", "buenass") que
+// en logs reales se saltaban el fast-path y disparaban una llamada al modelo.
+const ES_GREETINGS = new Set([
+  "hola", "holaa", "holaaa", "holi", "holis", "holaptt", "holq",
+  "ola", "olaa", "hlla", "hloa", "hoola", "hla", "wola", "olis",
+  "buenas", "buenass", "buenasa", "wenas", "buenos", "bnas",
+  "buenosdias", "buenasdias", "buenostardes", "buenastardes", "buenasnoches", "buenanoches",
+  "ey", "eyy", "quetal", "holabuenas", "saludos", "holaa",
+]);
+const EN_GREETINGS = new Set([
+  "hi", "hii", "hiii", "hy", "hey", "heyy", "heya", "heythere",
+  "hello", "helo", "helloo", "hellothere", "yo",
+  "goodmorning", "goodafternoon", "goodevening", "greetings", "gm",
+]);
+const START_TOKENS = new Set(["start"]);
 
-const EN_RE = /\b(hi|hello|hey|good\s*(morning|afternoon|evening))\b/i;
+function normalizeGreeting(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // quita acentos
+    .replace(/[^a-z]/g, ""); // quita espacios, signos, dígitos
+}
 
 /** Devuelve el idioma del saludo si el mensaje es SOLO un saludo; null si no. */
 export function detectGreeting(text: string | undefined): Lang | null {
-  if (!text) return null;
-  if (!GREETING_RE.test(text)) return null;
-  return EN_RE.test(text) ? "en" : "es";
+  if (!text || text.length > 40) return null; // un saludo es corto
+  const n = normalizeGreeting(text);
+  if (!n) return null;
+  if (EN_GREETINGS.has(n)) return "en";
+  if (ES_GREETINGS.has(n) || START_TOKENS.has(n)) return "es";
+  return null;
 }
 
 export interface Welcome {
