@@ -10,6 +10,9 @@ test("detectGreeting", () => {
   assert.strictEqual(detectGreeting("Buenos días"), "es");
   assert.strictEqual(detectGreeting("buenas tardes"), "es");
   assert.strictEqual(detectGreeting("/start"), "es");
+  assert.strictEqual(detectGreeting("Hlla"), "es"); // errata por "Hola"
+  assert.strictEqual(detectGreeting("ola"), "es");
+  assert.strictEqual(detectGreeting("buenass"), "es");
 
   // Saludos puros en inglés.
   assert.strictEqual(detectGreeting("Hi"), "en");
