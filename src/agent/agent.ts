@@ -54,7 +54,8 @@ Estilo:
 
 export const apiAgent = new Agent<AgentContext>({
   name: "ResponseGrid Agent",
-  ...(env.openaiModel ? { model: env.openaiModel } : {}),
+  // Siempre explícito (string): el SDK aplica así los modelSettings por defecto del modelo.
+  model: env.openaiModel,
   instructions: async (runContext) => buildInstructions(runContext.context.account),
   tools: agentTools,
 });

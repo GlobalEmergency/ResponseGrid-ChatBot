@@ -94,7 +94,7 @@ Edita `.env`:
 
 ```env
 OPENAI_API_KEY=sk-...
-# Opcional. Si lo dejas vacío, el SDK usará su modelo por defecto.
+# Opcional. Si lo dejas vacío se usa gpt-5.4-mini (valor por defecto explícito, no el del SDK).
 OPENAI_MODEL=
 
 API_BASE_URL=https://api.responsegrid.app

@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert";
 import { ConversationService, MAX_TEXT_LENGTH, isCorruptedHistoryError, isTransientError } from "./conversation-service.js";
+import { ModelIncompleteResponseError } from "./model-incomplete-response-error.js";
 import { RateLimiter } from "./rate-limiter.js";
+import type { ConversationLogFields } from "../infrastructure/observability/conversation-logger.js";
 import type { Account } from "../domain/account.js";
 import type { MessagingChannel, SelectionOption } from "../domain/ports/messaging-channel.port.js";
 import type { AuthStore } from "../domain/ports/auth-store.port.js";
@@ -271,6 +273,33 @@ test("ConversationService · si el reintento también falla, avisa sin lanzar", 
   await service.handle({ account, chatId: "902", text: "consulta" }, channel); // no debe lanzar
   assert.strictEqual(calls, 2);
   assert.match(sent[0].text, /problema técnico temporal/);
+});
+
+test("isTransientError no trata una respuesta incompleta del modelo como transitoria", () => {
+  assert.ok(!isTransientError(new ModelIncompleteResponseError("max_output_tokens").message));
+});
+
+test("ConversationService · respuesta incompleta del modelo: registra la causa, no reintenta y avisa", async () => {
+  const authStore = makeFakeAuthStore();
+  const logs: ConversationLogFields[] = [];
+  let calls = 0;
+  const service = new ConversationService(
+    { getSession: () => makeFakeSession(), authStore, log: (fields) => void logs.push(fields) },
+    async () => {
+      calls += 1;
+      throw new ModelIncompleteResponseError("max_output_tokens");
+    },
+  );
+  const { channel, sent } = makeFakeChannel();
+
+  await service.handle({ account, chatId: "904", text: "consulta" }, channel); // no debe lanzar
+
+  assert.strictEqual(calls, 1, "no reintenta");
+  const errors = logs.filter((l) => l.kind === "error");
+  assert.strictEqual(errors.length, 1);
+  assert.strictEqual(errors[0].error, "model-incomplete (max_output_tokens)");
+  assert.strictEqual(sent.length, 1);
+  assert.match(sent[0].text, /problema procesando/);
 });
 
 test("ConversationService · error no transitorio: avisa sin reintentar ni lanzar", async () => {

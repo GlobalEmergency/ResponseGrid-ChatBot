@@ -5,6 +5,7 @@ import { loadAccountsFromFile } from "./config/accounts.js";
 import { AccountRegistry } from "./application/account-registry.js";
 import { ConversationService } from "./application/conversation-service.js";
 import { RateLimiter } from "./application/rate-limiter.js";
+import { createOpenAIRunner } from "./infrastructure/openai/incomplete-response-guard.js";
 import { FileSessionRepository } from "./infrastructure/persistence/file-session-store.js";
 import { JsonTokenStore } from "./infrastructure/persistence/json-token-store.js";
 import { startTelegramBots } from "./infrastructure/telegram/telegram-bootstrap.js";
@@ -16,11 +17,17 @@ const registry = new AccountRegistry(loadAccountsFromFile(accountsFile));
 const sessions = new FileSessionRepository(join(process.cwd(), ".sessions"));
 const authStore = new JsonTokenStore(join(process.cwd(), ".sessions", "tokens.json"));
 
-const conversationService = new ConversationService({
-  getSession: (account, chatId) => sessions.getOrCreate(account, chatId),
-  authStore,
-  rateLimiter: new RateLimiter(),
-});
+// Runner con guard de respuestas incompletas del modelo (falla rápido en vez de agotar turnos).
+const runner = createOpenAIRunner();
+
+const conversationService = new ConversationService(
+  {
+    getSession: (account, chatId) => sessions.getOrCreate(account, chatId),
+    authStore,
+    rateLimiter: new RateLimiter(),
+  },
+  (agent, input, options) => runner.run(agent, input, options),
+);
 
 const telegramBots = startTelegramBots(registry, conversationService, sessions, authStore);
 // Telegraf v4: bot.launch() no resuelve hasta que el bot se DETIENE, así que NO se puede

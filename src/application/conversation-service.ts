@@ -9,11 +9,15 @@ import type { ConversationStore } from "../domain/ports/conversation-store.port.
 import type { AuthStore } from "../domain/ports/auth-store.port.js";
 import { ApiClient } from "../infrastructure/responsegrid/api-client.js";
 import { logConversation, type ConversationLogFields } from "../infrastructure/observability/conversation-logger.js";
+import { ModelIncompleteResponseError } from "./model-incomplete-response-error.js";
 import type { RateLimiter } from "./rate-limiter.js";
 import { detectGreeting, WELCOME } from "./welcome.js";
 
 /** Longitud máxima de un mensaje de texto que se procesa (protege coste/abuso). */
 export const MAX_TEXT_LENGTH = 8000;
+
+/** Aviso genérico al usuario ante un error no recuperable del run. */
+const GENERIC_ERROR_REPLY = "Perdona, ha habido un problema procesando tu mensaje. Inténtalo de nuevo, por favor.";
 
 /**
  * Detecta el error de OpenAI por historial con un par de tool incompleto
@@ -145,6 +149,13 @@ export class ConversationService {
       const message = error instanceof Error ? error.message : String(error);
       log({ kind: "error", ...logBase, ms: Date.now() - startedAt, error: message });
 
+      // Respuesta incompleta y vacía del modelo: no es transitoria (reintentar repite el
+      // fallo). Ya queda registrada arriba como "model-incomplete (<motivo>)".
+      if (error instanceof ModelIncompleteResponseError) {
+        await channel.sendText(chatId, GENERIC_ERROR_REPLY);
+        return;
+      }
+
       // Historial con un par de tool incompleto: OpenAI rechaza cada turno y el
       // usuario queda bloqueado. Reiniciamos la sesión y pedimos repetir.
       if (isCorruptedHistoryError(message)) {
@@ -174,10 +185,7 @@ export class ConversationService {
         }
       } else {
         // Cualquier otro error: nunca dejar al usuario en silencio.
-        await channel.sendText(
-          chatId,
-          "Perdona, ha habido un problema procesando tu mensaje. Inténtalo de nuevo, por favor.",
-        );
+        await channel.sendText(chatId, GENERIC_ERROR_REPLY);
         return;
       }
     }
