@@ -160,7 +160,7 @@ test("validación de email en las tools", async (t) => {
     assert.strictEqual(requests.length, 0);
   });
 
-  await t.test("rg_preregister_donation envía un donorEmail válido", async () => {
+  await t.test("rg_preregister_donation envía el donorEmail válido recortado", async () => {
     const { runContext, requests } = fakeContext();
     await rgPreregisterDonation.invoke(
       runContext,
@@ -168,7 +168,7 @@ test("validación de email en las tools", async (t) => {
         emergencyId: EMERGENCY_ID,
         targetResourceId: RESOURCE_ID,
         donorName: "Ana Pérez",
-        donorEmail: "ana@correo.com",
+        donorEmail: "  ana@correo.com ",
         items: donationItems,
       }),
     );
@@ -192,5 +192,22 @@ test("validación de email en las tools", async (t) => {
     );
     assert.match(String(result), /El email 'ana@' no parece válido/);
     assert.strictEqual(requests.length, 0);
+  });
+
+  await t.test("rg_create_need envía el author.email válido recortado y conserva el resto del author", async () => {
+    const { runContext, requests } = fakeContext();
+    await rgCreateNeed.invoke(
+      runContext,
+      JSON.stringify({
+        emergencyId: EMERGENCY_ID,
+        title: "Agua potable",
+        location: { address: "Plaza Mayor", latitude: 10.5, longitude: -66.9 },
+        priority: "high",
+        items: donationItems,
+        author: { name: "Ana", email: " ana@correo.com  " },
+      }),
+    );
+    assert.strictEqual(requests.length, 1);
+    assert.deepStrictEqual(requests[0]!.body.author, { name: "Ana", email: "ana@correo.com" });
   });
 });

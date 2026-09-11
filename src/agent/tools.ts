@@ -167,11 +167,29 @@ function invalidEmailMessage(raw: string, followUp: string): string {
   return `El email '${raw}' no parece válido. ${followUp}`;
 }
 
-/** Mensaje para el agente si llega un email opcional con formato no válido; undefined si es válido o no viene. */
-function invalidOptionalEmailMessage(raw: string | undefined): string | undefined {
-  return raw && !Email.tryCreate(raw)
-    ? invalidEmailMessage(raw, "Pide al usuario que lo revise o que lo omita si prefiere no darlo.")
-    : undefined;
+/**
+ * Normaliza con el value object Email un email opcional que llega del modelo: `{ value }` con el
+ * email recortado (vacío si no viene) o `{ error }` con el mensaje para el agente si no es válido.
+ */
+function normalizeOptionalEmail(raw: string | undefined): { value?: string; error?: string } {
+  if (!raw) {
+    return {};
+  }
+  const email = Email.tryCreate(raw);
+  return email
+    ? { value: email.value }
+    : { error: invalidEmailMessage(raw, "Pide al usuario que lo revise o que lo omita si prefiere no darlo.") };
+}
+
+/** Valida y normaliza `author.email`: devuelve el mensaje para el agente o el input con el email recortado. */
+function withNormalizedAuthorEmail<T extends { author?: { email?: string | undefined } | undefined }>(
+  input: T,
+): T | string {
+  const { value, error } = normalizeOptionalEmail(input.author?.email);
+  if (error) {
+    return error;
+  }
+  return input.author ? { ...input, author: { ...input.author, email: value } } : input;
 }
 
 export const rgGetApiIdentity = tool({
@@ -372,12 +390,12 @@ export const rgRegisterResource = tool({
   execute: async (input, runContext?: RunContext<AgentContext>) => {
     const context = getContext(runContext);
     requireAuth(context);
-    const authorEmailError = invalidOptionalEmailMessage(input.author?.email);
-    if (authorEmailError) {
-      return authorEmailError;
+    const normalized = withNormalizedAuthorEmail(input);
+    if (typeof normalized === "string") {
+      return normalized;
     }
-    const emergencyId = await resolveEmergencyId(context, input);
-    const { emergencyId: _eid, emergencySlug: _slug, ...payload } = input;
+    const emergencyId = await resolveEmergencyId(context, normalized);
+    const { emergencyId: _eid, emergencySlug: _slug, ...payload } = normalized;
     const result = await context.apiClient.request(
       "POST",
       `/emergencies/${emergencyId}/resources`,
@@ -462,16 +480,16 @@ export const rgPreregisterDonation = tool({
   }),
   execute: async (input, runContext?: RunContext<AgentContext>) => {
     const context = getContext(runContext);
-    const donorEmailError = invalidOptionalEmailMessage(input.donorEmail);
-    if (donorEmailError) {
-      return donorEmailError;
+    const donorEmail = normalizeOptionalEmail(input.donorEmail);
+    if (donorEmail.error) {
+      return donorEmail.error;
     }
     const emergencyId = await resolveEmergencyId(context, input);
     const { emergencyId: _eid, emergencySlug: _slug, ...payload } = input;
     const result = await context.apiClient.request(
       "POST",
       `/emergencies/${emergencyId}/donation-intakes`,
-      payload,
+      { ...payload, donorEmail: donorEmail.value },
     );
     return asPrettyJson(result);
   },
@@ -492,12 +510,12 @@ export const rgSubmitOffer = tool({
   execute: async (input, runContext?: RunContext<AgentContext>) => {
     const context = getContext(runContext);
     requireAuth(context);
-    const authorEmailError = invalidOptionalEmailMessage(input.author?.email);
-    if (authorEmailError) {
-      return authorEmailError;
+    const normalized = withNormalizedAuthorEmail(input);
+    if (typeof normalized === "string") {
+      return normalized;
     }
-    const emergencyId = await resolveEmergencyId(context, input);
-    const { emergencyId: _eid, emergencySlug: _slug, ...payload } = input;
+    const emergencyId = await resolveEmergencyId(context, normalized);
+    const { emergencyId: _eid, emergencySlug: _slug, ...payload } = normalized;
     const result = await context.apiClient.request(
       "POST",
       `/emergencies/${emergencyId}/offers`,
@@ -646,12 +664,12 @@ export const rgCreateNeed = tool({
   execute: async (input, runContext?: RunContext<AgentContext>) => {
     const context = getContext(runContext);
     requireAuth(context);
-    const authorEmailError = invalidOptionalEmailMessage(input.author?.email);
-    if (authorEmailError) {
-      return authorEmailError;
+    const normalized = withNormalizedAuthorEmail(input);
+    if (typeof normalized === "string") {
+      return normalized;
     }
-    const emergencyId = await resolveEmergencyId(context, input);
-    const { emergencyId: _eid, emergencySlug: _slug, ...payload } = input;
+    const emergencyId = await resolveEmergencyId(context, normalized);
+    const { emergencyId: _eid, emergencySlug: _slug, ...payload } = normalized;
     const result = await context.apiClient.request(
       "POST",
       `/emergencies/${emergencyId}/needs`,

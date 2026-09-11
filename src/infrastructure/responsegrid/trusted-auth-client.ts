@@ -60,9 +60,9 @@ export class TrustedAuthClient {
     }
 
     if (response.status === 400) {
-      throw new InvalidRegistrationDataError(
-        `register-by-phone rechazó los datos: ${(await response.text()).slice(0, 500)}`,
-      );
+      // Igual que en api-client: el body crudo se logea aparte y NO va en el error (el agente podría parafrasearlo).
+      console.error(`[trusted-auth] register-by-phone -> 400 :: ${(await response.text()).slice(0, 500)}`);
+      throw new InvalidRegistrationDataError("register-by-phone rechazó los datos de registro (400).");
     }
 
     if (!response.ok) {

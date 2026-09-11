@@ -82,7 +82,7 @@ test("TrustedAuthClient", async (t) => {
     );
   });
 
-  await t.test("registerByPhone lanza InvalidRegistrationDataError en 400", async () => {
+  await t.test("registerByPhone lanza InvalidRegistrationDataError en 400, sin incrustar el body", async () => {
     await withMockedFetch(
       (async () =>
         new Response(JSON.stringify({ statusCode: 400, message: ["email must be an email"] }), {
@@ -92,7 +92,12 @@ test("TrustedAuthClient", async (t) => {
         const client = new TrustedAuthClient("https://api.test");
         await assert.rejects(
           () => client.registerByPhone(account, { phone: "+34600000000", name: "Ana", email: "ana@x" }),
-          InvalidRegistrationDataError,
+          (error: unknown) => {
+            assert.ok(error instanceof InvalidRegistrationDataError);
+            // El body crudo se logea aparte; el error (que puede llegar al agente) no lo lleva.
+            assert.doesNotMatch(error.message, /email must be an email/);
+            return true;
+          },
         );
       },
     );
