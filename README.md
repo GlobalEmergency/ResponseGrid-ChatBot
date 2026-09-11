@@ -113,7 +113,7 @@ Two files, both git-ignored (only their `*.example.*` counterparts are tracked):
 
 ```env
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=                     # optional; empty = SDK default
+OPENAI_MODEL=                     # optional; empty = gpt-5.4-mini (explicit default, not the SDK's)
 API_BASE_URL=https://api.responsegrid.app
 
 # Only if you have any channel="whatsapp" account:
