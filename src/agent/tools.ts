@@ -709,7 +709,9 @@ export const rgRegisterByPhone = tool({
     "Da de alta una cuenta nueva de ResponseGrid a partir del teléfono ya verificado del usuario, cuando rg_request_user_login ha respondido que no existe cuenta. Requiere que el usuario haya confirmado explícitamente que acepta los términos y la política de privacidad antes de llamarla.",
   parameters: z.object({
     name: z.string().min(2).describe("Nombre completo del usuario."),
-    email: z.string().email().describe("Email del usuario."),
+    // ponytail: sin .email() — zod lo emite como `pattern` con lookahead y el modo strict
+    // de OpenAI rechaza TODO el set de tools (bot mudo). El formato lo valida la API.
+    email: z.string().describe("Email del usuario."),
     acceptedTerms: z
       .boolean()
       .describe("true solo si el usuario ha confirmado explícitamente que acepta términos y privacidad."),

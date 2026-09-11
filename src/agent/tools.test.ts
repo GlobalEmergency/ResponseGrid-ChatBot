@@ -14,6 +14,15 @@ test("agentTools registra las tools de donación", () => {
   assert.ok(names.has("rg_record_inventory_entry"));
 });
 
+test("ningún schema de tool usa lookahead en `pattern` (strict de OpenAI lo rechaza en silencio)", () => {
+  // Un `pattern` con `(?!…)`/`(?=…)` (lo que genera zod con `.email()`) hace que la
+  // Responses API devuelva `incomplete: max_output_tokens` sin output para TODO el
+  // set de tools: el agente agota maxTurns y el bot deja de contestar a todos.
+  for (const t of agentTools as any[]) {
+    assert.doesNotMatch(JSON.stringify(t.parameters), /\(\?[=!<]/, `${t.name} tiene un pattern con lookahead`);
+  }
+});
+
 test("rg_record_inventory_entry se documenta como acción de staff, no de donación", () => {
   const inv = agentTools.find((t: any) => t.name === "rg_record_inventory_entry") as any;
   assert.match(inv.description, /rg_preregister_donation|donar|donaci/i);
