@@ -14,6 +14,8 @@ export interface TrustedAuthResult {
 
 export class PhoneNotFoundError extends Error {}
 export class EmailAlreadyExistsError extends Error {}
+/** ResponseGrid rechaza los datos del alta (400 de validación, p. ej. email mal formado). */
+export class InvalidRegistrationDataError extends Error {}
 
 export class TrustedAuthClient {
   constructor(private readonly baseUrl: string = env.apiBaseUrl ?? "") {}
@@ -55,6 +57,12 @@ export class TrustedAuthClient {
 
     if (response.status === 409) {
       throw new EmailAlreadyExistsError(`Ya existe una cuenta con el email ${input.email}`);
+    }
+
+    if (response.status === 400) {
+      // Igual que en api-client: el body crudo se logea aparte y NO va en el error (el agente podría parafrasearlo).
+      console.error(`[trusted-auth] register-by-phone -> 400 :: ${(await response.text()).slice(0, 500)}`);
+      throw new InvalidRegistrationDataError("register-by-phone rechazó los datos de registro (400).");
     }
 
     if (!response.ok) {

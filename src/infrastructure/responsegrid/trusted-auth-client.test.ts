@@ -4,6 +4,7 @@ import {
   TrustedAuthClient,
   PhoneNotFoundError,
   EmailAlreadyExistsError,
+  InvalidRegistrationDataError,
 } from "./trusted-auth-client.js";
 import type { Account } from "../../domain/account.js";
 
@@ -76,6 +77,27 @@ test("TrustedAuthClient", async (t) => {
         await assert.rejects(
           () => client.registerByPhone(account, { phone: "+34600000000", name: "Ana", email: "ana@x.com" }),
           EmailAlreadyExistsError,
+        );
+      },
+    );
+  });
+
+  await t.test("registerByPhone lanza InvalidRegistrationDataError en 400, sin incrustar el body", async () => {
+    await withMockedFetch(
+      (async () =>
+        new Response(JSON.stringify({ statusCode: 400, message: ["email must be an email"] }), {
+          status: 400,
+        })) as unknown as typeof fetch,
+      async () => {
+        const client = new TrustedAuthClient("https://api.test");
+        await assert.rejects(
+          () => client.registerByPhone(account, { phone: "+34600000000", name: "Ana", email: "ana@x" }),
+          (error: unknown) => {
+            assert.ok(error instanceof InvalidRegistrationDataError);
+            // El body crudo se logea aparte; el error (que puede llegar al agente) no lo lleva.
+            assert.doesNotMatch(error.message, /email must be an email/);
+            return true;
+          },
         );
       },
     );
