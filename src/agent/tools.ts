@@ -5,8 +5,10 @@ import {
   TrustedAuthClient,
   PhoneNotFoundError,
   EmailAlreadyExistsError,
+  InvalidRegistrationDataError,
 } from "../infrastructure/responsegrid/trusted-auth-client.js";
 import { ApiClient } from "../infrastructure/responsegrid/api-client.js";
+import { Email } from "../domain/email.js";
 import { toToolJson } from "./tool-result.js";
 
 const trustedAuthClient = new TrustedAuthClient();
@@ -87,9 +89,17 @@ const supplyLineSchema = z.object({
     .describe("Fecha de caducidad o frescura en formato YYYY-MM-DD, si aplica."),
 });
 
+// Fuente única para los campos email de las tools: solo `z.string()`. Con `.email()` zod emite un
+// `pattern` con lookahead que el modo strict de OpenAI rechaza (y deja mudo al bot), y en los campos
+// opcionales el SDK además elimina format/pattern sin avisar. Por eso el formato se valida en
+// `execute` con el value object Email.
+function emailField(description: string) {
+  return z.string().describe(description);
+}
+
 const authorSchema = z.object({
   name: z.string().optional(),
-  email: z.string().email().optional(),
+  email: emailField("Email de contacto del autor, si lo da.").optional(),
   phone: z.string().optional(),
   note: z.string().optional(),
   verified: z.boolean().optional(),
@@ -151,6 +161,17 @@ function requireAuth(context: AgentContext): void {
       "Esta acción requiere que el usuario esté autenticado. Usa la tool rg_request_user_login para pedirle que inicie sesión antes de continuar.",
     );
   }
+}
+
+function invalidEmailMessage(raw: string, followUp: string): string {
+  return `El email '${raw}' no parece válido. ${followUp}`;
+}
+
+/** Mensaje para el agente si llega un email opcional con formato no válido; undefined si es válido o no viene. */
+function invalidOptionalEmailMessage(raw: string | undefined): string | undefined {
+  return raw && !Email.tryCreate(raw)
+    ? invalidEmailMessage(raw, "Pide al usuario que lo revise o que lo omita si prefiere no darlo.")
+    : undefined;
 }
 
 export const rgGetApiIdentity = tool({
@@ -351,6 +372,10 @@ export const rgRegisterResource = tool({
   execute: async (input, runContext?: RunContext<AgentContext>) => {
     const context = getContext(runContext);
     requireAuth(context);
+    const authorEmailError = invalidOptionalEmailMessage(input.author?.email);
+    if (authorEmailError) {
+      return authorEmailError;
+    }
     const emergencyId = await resolveEmergencyId(context, input);
     const { emergencyId: _eid, emergencySlug: _slug, ...payload } = input;
     const result = await context.apiClient.request(
@@ -432,11 +457,15 @@ export const rgPreregisterDonation = tool({
       .describe("ID del punto de acopio destino donde la persona entregará la donación."),
     donorName: z.string().min(2).describe("Nombre de quien dona."),
     donorPhone: z.string().optional().describe("Teléfono de contacto del donante, si lo da."),
-    donorEmail: z.string().email().optional().describe("Email del donante, si lo da."),
+    donorEmail: emailField("Email del donante, si lo da.").optional(),
     items: z.array(supplyLineSchema).min(1),
   }),
   execute: async (input, runContext?: RunContext<AgentContext>) => {
     const context = getContext(runContext);
+    const donorEmailError = invalidOptionalEmailMessage(input.donorEmail);
+    if (donorEmailError) {
+      return donorEmailError;
+    }
     const emergencyId = await resolveEmergencyId(context, input);
     const { emergencyId: _eid, emergencySlug: _slug, ...payload } = input;
     const result = await context.apiClient.request(
@@ -463,6 +492,10 @@ export const rgSubmitOffer = tool({
   execute: async (input, runContext?: RunContext<AgentContext>) => {
     const context = getContext(runContext);
     requireAuth(context);
+    const authorEmailError = invalidOptionalEmailMessage(input.author?.email);
+    if (authorEmailError) {
+      return authorEmailError;
+    }
     const emergencyId = await resolveEmergencyId(context, input);
     const { emergencyId: _eid, emergencySlug: _slug, ...payload } = input;
     const result = await context.apiClient.request(
@@ -613,6 +646,10 @@ export const rgCreateNeed = tool({
   execute: async (input, runContext?: RunContext<AgentContext>) => {
     const context = getContext(runContext);
     requireAuth(context);
+    const authorEmailError = invalidOptionalEmailMessage(input.author?.email);
+    if (authorEmailError) {
+      return authorEmailError;
+    }
     const emergencyId = await resolveEmergencyId(context, input);
     const { emergencyId: _eid, emergencySlug: _slug, ...payload } = input;
     const result = await context.apiClient.request(
@@ -709,9 +746,9 @@ export const rgRegisterByPhone = tool({
     "Da de alta una cuenta nueva de ResponseGrid a partir del teléfono ya verificado del usuario, cuando rg_request_user_login ha respondido que no existe cuenta. Requiere que el usuario haya confirmado explícitamente que acepta los términos y la política de privacidad antes de llamarla.",
   parameters: z.object({
     name: z.string().min(2).describe("Nombre completo del usuario."),
-    // ponytail: sin .email() — zod lo emite como `pattern` con lookahead y el modo strict
-    // de OpenAI rechaza TODO el set de tools (bot mudo). El formato lo valida la API.
-    email: z.string().describe("Email del usuario."),
+    // Sin `.email()`: el modo strict de OpenAI rechaza los `pattern` con lookahead que genera zod
+    // (y con ellos TODO el set de tools). El formato se valida en `execute` con el value object Email.
+    email: emailField("Email del usuario."),
     acceptedTerms: z
       .boolean()
       .describe("true solo si el usuario ha confirmado explícitamente que acepta términos y privacidad."),
@@ -727,17 +764,25 @@ export const rgRegisterByPhone = tool({
       return "No puedo crear la cuenta sin que el usuario confirme explícitamente que acepta los términos y la política de privacidad. Pídeselo de nuevo antes de reintentar.";
     }
 
+    const email = Email.tryCreate(input.email);
+    if (!email) {
+      return invalidEmailMessage(input.email, "Pide al usuario que lo revise y lo escriba de nuevo.");
+    }
+
     try {
       const result = await trustedAuthClient.registerByPhone(context.account, {
         phone: context.verifiedPhone,
         name: input.name,
-        email: input.email,
+        email: email.value,
       });
       applyUserLogin(context, result.accessToken);
       return `Cuenta creada y autenticada con éxito como ${result.user.name} (${result.user.email}).`;
     } catch (error) {
       if (error instanceof EmailAlreadyExistsError) {
         return "Ya existe una cuenta de ResponseGrid con ese email. Pide al usuario un email distinto.";
+      }
+      if (error instanceof InvalidRegistrationDataError) {
+        return `ResponseGrid ha rechazado los datos de registro: el email '${email.value}' no parece válido o algún otro dato es incorrecto. Pide al usuario que revise su nombre y su email y los escriba de nuevo.`;
       }
       throw error;
     }
