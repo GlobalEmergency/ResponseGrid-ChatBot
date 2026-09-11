@@ -4,6 +4,7 @@ import {
   TrustedAuthClient,
   PhoneNotFoundError,
   EmailAlreadyExistsError,
+  InvalidRegistrationDataError,
 } from "./trusted-auth-client.js";
 import type { Account } from "../../domain/account.js";
 
@@ -76,6 +77,22 @@ test("TrustedAuthClient", async (t) => {
         await assert.rejects(
           () => client.registerByPhone(account, { phone: "+34600000000", name: "Ana", email: "ana@x.com" }),
           EmailAlreadyExistsError,
+        );
+      },
+    );
+  });
+
+  await t.test("registerByPhone lanza InvalidRegistrationDataError en 400", async () => {
+    await withMockedFetch(
+      (async () =>
+        new Response(JSON.stringify({ statusCode: 400, message: ["email must be an email"] }), {
+          status: 400,
+        })) as unknown as typeof fetch,
+      async () => {
+        const client = new TrustedAuthClient("https://api.test");
+        await assert.rejects(
+          () => client.registerByPhone(account, { phone: "+34600000000", name: "Ana", email: "ana@x" }),
+          InvalidRegistrationDataError,
         );
       },
     );
